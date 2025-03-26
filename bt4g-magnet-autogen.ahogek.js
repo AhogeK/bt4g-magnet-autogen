@@ -8,8 +8,8 @@
 // @icon         https://downloadtorrentfile.com/favicon.ico
 // @grant        GM_setValue
 // @grant        GM_getValue
-// @updateURL    https://raw.githubusercontent.com/ahogek/bt4g-magnet-autogen/main/bt4g-magnet-autogen.ahogek.js
-// @downloadURL  https://raw.githubusercontent.com/ahogek/bt4g-magnet-autogen/main/bt4g-magnet-autogen.ahogek.js
+// @updateURL    https://raw.githubusercontent.com/AhogeK/bt4g-magnet-autogen/main/bt4g-magnet-autogen.ahogek.js
+// @downloadURL  https://raw.githubusercontent.com/AhogeK/bt4g-magnet-autogen/main/bt4g-magnet-autogen.ahogek.js
 // ==/UserScript==
 
 (function() {
