@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BT4G Magnet AutoGen
 // @namespace    https://ahogek.com
-// @version      1.0.2
+// @version      1.0.3
 // @description  自动转换BT4G哈希到磁力链接并延迟尝试关闭页面
 // @author       AhogeK
 // @match        *://*.bt4g.org/*
