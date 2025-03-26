@@ -287,13 +287,6 @@
                 return;
             }
 
-            // 检查当前输入是否与上次保存的原始查询不同
-            const savedOriginalQuery = localStorage.getItem('bt4g_original_query') || '';
-            if (baseQuery !== savedOriginalQuery && savedOriginalQuery !== '') {
-                // 如果不同，重置高级搜索选项
-                resetAdvancedOptions();
-            }
-
             // 存储原始查询
             localStorage.setItem('bt4g_original_query', baseQuery);
             originalQueryInput.value = baseQuery;
