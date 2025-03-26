@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BT4G Magnet AutoGen
 // @namespace    https://ahogek.com
-// @version      1.1.4
+// @version      1.1.5
 // @description  自动转换BT4G哈希到磁力链接 | 添加高级搜索选项：分辨率、HDR、编码、杜比音频和模糊搜索
 // @author       AhogeK
 // @match        *://*.bt4g.org/*
@@ -101,7 +101,7 @@
         },
         audio: {
             '杜比': ['Dolby', 'DD', 'DD+', 'DDP', 'DolbyDigital', '杜比'],
-            '杜比全景声': ['Atmos', 'DolbyAtmos', '全景声', '杜比全景声'],
+            '杜比全景声': ['Atmos', 'DolbyAtmos'],
             'DTS': ['DTS', 'DTSHD', 'DTSHDMA', 'DTSX'],
             'TrueHD': ['TrueHD', 'TRUEHD']
         }
