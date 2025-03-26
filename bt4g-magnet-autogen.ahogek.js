@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BT4G Magnet AutoGen
 // @namespace    https://ahogek.com
-// @version      1.1.3
+// @version      1.1.4
 // @description  自动转换BT4G哈希到磁力链接 | 添加高级搜索选项：分辨率、HDR、编码、杜比音频和模糊搜索
 // @author       AhogeK
 // @match        *://*.bt4g.org/*
@@ -125,21 +125,15 @@
         // 获取URL参数
         const urlParams = new URLSearchParams(window.location.search);
 
-        // 为搜索表单添加相对定位，这样高级搜索可以正确定位
-        searchForm.style.position = 'relative';
-
-        // 创建高级搜索选项容器
+        // 创建高级搜索选项容器，直接放在搜索框下方
         const advancedSearchDiv = document.createElement('div');
-        advancedSearchDiv.className = 'advanced-search mb-2';
+        advancedSearchDiv.className = 'advanced-search mb-3 mt-2';
 
-        // 根据当前主题设置样式
-        updateAdvancedSearchStyle(advancedSearchDiv, isDarkMode);
+        // 应用固定样式而非弹出样式
+        updateFixedAdvancedSearchStyle(advancedSearchDiv, isDarkMode);
 
-        // 默认隐藏高级搜索选项
-        advancedSearchDiv.style.display = 'none';
-
-        // 添加到搜索表单中
-        searchForm.appendChild(advancedSearchDiv);
+        // 添加到搜索表单之后（不是内部）
+        searchForm.parentNode.insertBefore(advancedSearchDiv, searchForm.nextSibling);
 
         // 创建分辨率选项行
         const resolutionRow = createOptionRow('resolution', '分辨率：', [
@@ -184,6 +178,8 @@
         audioLabel.style.cssText = 'width: 80px; margin-right: 10px; white-space: nowrap; font-weight: bold;';
         if (isDarkMode) {
             audioLabel.style.color = '#e9ecef';
+        } else {
+            audioLabel.style.color = '#212529'; // 确保亮色模式下标签文字颜色为深色
         }
         audioOptions.appendChild(audioLabel);
 
@@ -212,7 +208,7 @@
             radio.checked = index === 0; // 默认选中第一个选项
 
             const optionLabel = document.createElement('label');
-            optionLabel.className = isDarkMode ? 'btn btn-outline-light btn-sm' : 'btn btn-outline-secondary btn-sm';
+            optionLabel.className = isDarkMode ? 'btn btn-outline-light btn-sm' : 'btn btn-outline-dark btn-sm'; // 改为outline-dark
             optionLabel.htmlFor = id;
             optionLabel.textContent = choice.label;
 
@@ -228,7 +224,7 @@
         // 创建重置按钮
         const resetButton = document.createElement('button');
         resetButton.type = 'button';
-        resetButton.className = isDarkMode ? 'btn btn-outline-light btn-sm' : 'btn btn-outline-secondary btn-sm';
+        resetButton.className = isDarkMode ? 'btn btn-outline-light btn-sm' : 'btn btn-outline-dark btn-sm'; // 改为outline-dark
         resetButton.textContent = '重置选项';
 
         // 添加重置按钮的点击事件
@@ -289,6 +285,13 @@
             if (!baseQuery) {
                 searchForm.submit();
                 return;
+            }
+
+            // 检查当前输入是否与上次保存的原始查询不同
+            const savedOriginalQuery = localStorage.getItem('bt4g_original_query') || '';
+            if (baseQuery !== savedOriginalQuery && savedOriginalQuery !== '') {
+                // 如果不同，重置高级搜索选项
+                resetAdvancedOptions();
             }
 
             // 存储原始查询
@@ -394,9 +397,6 @@
             restoreAdvancedSettings();
         }
 
-        // 添加高级搜索按钮
-        addAdvancedSearchButton(advancedSearchDiv, isDarkMode);
-
         // 监听主题切换按钮的点击事件
         const themeToggle = document.getElementById('theme-toggle');
         if (themeToggle) {
@@ -409,14 +409,14 @@
                         document.documentElement.getAttribute('data-bs-theme') === 'dark';
 
                     // 更新高级搜索样式
-                    updateAdvancedSearchStyle(advancedSearchDiv, newDarkMode);
+                    updateFixedAdvancedSearchStyle(advancedSearchDiv, newDarkMode);
 
                     // 更新标签样式
                     document.querySelectorAll('.advanced-search label').forEach(label => {
                         if (newDarkMode) {
-                            label.style.color = '#e9ecef';
+                            label.className = label.className.replace('btn-outline-dark', 'btn-outline-light');
                         } else {
-                            label.style.color = '';
+                            label.className = label.className.replace('btn-outline-light', 'btn-outline-dark');
                         }
                     });
 
@@ -425,12 +425,14 @@
                         if (newDarkMode) {
                             span.style.color = '#e9ecef';
                         } else {
-                            span.style.color = '';
+                            span.style.color = '#212529';
                         }
                     });
 
                     // 更新重置按钮样式
-                    resetButton.className = newDarkMode ? 'btn btn-outline-light btn-sm' : 'btn btn-outline-secondary btn-sm';
+                    resetButton.className = newDarkMode ?
+                        'btn btn-outline-light btn-sm' :
+                        'btn btn-outline-dark btn-sm';
                 }, 100);
             });
         }
@@ -448,6 +450,8 @@
         labelElement.style.fontWeight = 'bold';
         if (isDarkMode) {
             labelElement.style.color = '#e9ecef';
+        } else {
+            labelElement.style.color = '#212529'; // 确保亮色模式下标签文字颜色为深色
         }
         row.appendChild(labelElement);
 
@@ -468,7 +472,7 @@
             radio.checked = index === 0; // 默认选中第一个选项
 
             const optionLabel = document.createElement('label');
-            optionLabel.className = isDarkMode ? 'btn btn-outline-light btn-sm' : 'btn btn-outline-secondary btn-sm';
+            optionLabel.className = isDarkMode ? 'btn btn-outline-light btn-sm' : 'btn btn-outline-dark btn-sm'; // 改为outline-dark
             optionLabel.htmlFor = id;
             optionLabel.textContent = choice.label;
 
@@ -498,8 +502,8 @@
         }
     }
 
-    // 更新高级搜索面板的样式，适应当前主题
-    function updateAdvancedSearchStyle(element, isDarkMode) {
+    // 更新固定式高级搜索面板的样式
+    function updateFixedAdvancedSearchStyle(element, isDarkMode) {
         let backgroundColor, textColor, borderColor;
 
         if (isDarkMode) {
@@ -509,86 +513,19 @@
         } else {
             backgroundColor = '#f8f9fa';
             textColor = '#212529';
-            borderColor = '#dee2e6';
+            borderColor = '#6c757d'; // 加深边框颜色，增加对比度
         }
 
         element.style.cssText = `
-            display: flex;
-            flex-direction: column;
-            width: 100%;
-            padding: 15px;
-            background-color: ${backgroundColor};
-            color: ${textColor};
-            border: 1px solid ${borderColor};
-            border-radius: 5px;
-            margin-top: 10px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-            z-index: 1000;
-            position: absolute;
-            top: 100%;
-            left: 0;
-        `;
-    }
-
-    // 辅助函数：添加高级搜索按钮
-    function addAdvancedSearchButton(advancedSearchDiv, isDarkMode) {
-        // 找到搜索按钮
-        const searchForm = document.querySelector('form[action="/search"]');
-        const searchButtonContainer = searchForm.querySelector('.input-group');
-
-        // 创建高级搜索按钮
-        const advancedButton = document.createElement('button');
-        advancedButton.type = 'button';
-        advancedButton.className = isDarkMode ? 'btn btn-outline-light' : 'btn btn-outline-secondary';
-        advancedButton.textContent = '高级搜索 ▾';
-        advancedButton.style.cssText = `
-            margin-left: 5px;
-        `;
-
-        // 在搜索按钮后插入高级搜索按钮
-        searchButtonContainer.appendChild(advancedButton);
-
-        // 添加点击事件
-        advancedButton.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-
-            if (advancedSearchDiv.style.display === 'none') {
-                advancedSearchDiv.style.display = 'flex';
-                advancedButton.textContent = '高级搜索 ▴';
-            } else {
-                advancedSearchDiv.style.display = 'none';
-                advancedButton.textContent = '高级搜索 ▾';
-            }
-        });
-
-        // 点击页面其他位置关闭高级搜索选项
-        document.addEventListener('click', (e) => {
-            if (!advancedSearchDiv.contains(e.target) &&
-                e.target !== advancedButton &&
-                advancedSearchDiv.style.display !== 'none') {
-                advancedSearchDiv.style.display = 'none';
-                advancedButton.textContent = '高级搜索 ▾';
-            }
-        });
-
-        // 阻止高级搜索面板内部的点击事件冒泡
-        advancedSearchDiv.addEventListener('click', (e) => {
-            e.stopPropagation();
-        });
-
-        // 监听主题切换，更新按钮样式
-        const themeToggle = document.getElementById('theme-toggle');
-        if (themeToggle) {
-            themeToggle.addEventListener('click', () => {
-                setTimeout(() => {
-                    const newDarkMode = document.body.classList.contains('dark-mode') ||
-                        document.documentElement.classList.contains('dark') ||
-                        document.documentElement.getAttribute('data-bs-theme') === 'dark';
-
-                    advancedButton.className = newDarkMode ? 'btn btn-outline-light' : 'btn btn-outline-secondary';
-                }, 100);
-            });
-        }
+     display: flex;
+     flex-direction: column;
+     width: 100%;
+     padding: 12px;
+     background-color: ${backgroundColor};
+     color: ${textColor};
+     border: 1px solid ${borderColor};
+     border-radius: 5px;
+     margin-bottom: 10px;
+   `;
     }
 })();
