@@ -13,7 +13,7 @@
 // @license      MIT
 // ==/UserScript==
 
-(function() {
+(function () {
     'use strict';
 
     // 查找所有磁力链接按钮
@@ -84,7 +84,7 @@
     const keywordMaps = {
         resolution: {
             '720p': ['720p', '720P', 'HD'],
-            '1080p': ['1080p', '1080P', 'FHD', 'FullHD', '1920x1080'],
+            '1080p': ['1080p', '1080P', 'HD1080P', 'FHD', 'FullHD', '1920x1080'],
             '4K/UHD': ['2160p', '2160P', '4K', '4k', 'UHD', 'UltraHD', '3840x2160', '4096x2160']
         },
         hdr: {
@@ -247,7 +247,6 @@
                 hdr: '',
                 codec: '',
                 audio: '',
-                fuzzy: true // 模糊搜索始终开启
             };
             localStorage.setItem('bt4g_advanced_settings', JSON.stringify(settings));
         });
@@ -277,7 +276,6 @@
                 hdr: document.querySelector('input[name="hdr"]:checked')?.value || '',
                 codec: document.querySelector('input[name="codec"]:checked')?.value || '',
                 audio: document.querySelector('input[name="audio"]:checked')?.value || '',
-                fuzzy: true // 模糊搜索始终开启
             };
             localStorage.setItem('bt4g_advanced_settings', JSON.stringify(settings));
         };
@@ -295,14 +293,16 @@
             }
         };
 
-        // 监听表单提交事件
-        searchForm.addEventListener('submit', function (e) {
-            e.preventDefault(); // 阻止表单默认提交
+        // 抽取搜索处理逻辑为独立函数
+        function processSearch(e) {
+            if (e) {
+                e.preventDefault(); // 阻止表单默认提交
+            }
 
             // 获取基本搜索词
             const baseQuery = searchInput.value.trim();
 
-            // 如果搜索词为空，不进行任何操作
+            // 如果搜索词为空，直接提交表单
             if (!baseQuery) {
                 searchForm.submit();
                 return;
@@ -317,12 +317,11 @@
             const hdr = document.querySelector('input[name="hdr"]:checked').value;
             const codec = document.querySelector('input[name="codec"]:checked').value;
             const audio = document.querySelector('input[name="audio"]:checked').value;
-            const fuzzy = true; // 模糊搜索始终开启
 
             // 存储高级搜索设置
             storeAdvancedSettings();
 
-            // 分两步构建搜索查询：先应用模糊搜索，再添加高级条件
+            // 构建搜索查询
             let baseQueryProcessed = baseQuery;
             let advancedConditions = [];
 
@@ -355,11 +354,6 @@
                 }
             }
 
-            // 应用模糊搜索仅到基本查询
-            if (fuzzy) {
-                baseQueryProcessed = baseQueryProcessed.replace(/\s+/g, ' * ');
-            }
-
             // 合并处理后的基本查询和高级条件
             let finalQuery = baseQueryProcessed;
             if (advancedConditions.length > 0) {
@@ -371,6 +365,16 @@
 
             // 提交表单
             searchForm.submit();
+        }
+
+        // 监听表单提交事件
+        searchForm.addEventListener('submit', processSearch);
+
+        // 监听搜索输入框的回车键事件
+        searchInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                processSearch(e);
+            }
         });
 
         // 如果在搜索结果页面上，恢复原始查询到搜索框
