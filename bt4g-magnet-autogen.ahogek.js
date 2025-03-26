@@ -1,13 +1,13 @@
 // ==UserScript==
 // @name         BT4G Magnet AutoGen
 // @namespace    https://ahogek.com
-// @version      1.0.1
+// @version      1.0.2
 // @description  自动转换BT4G哈希到磁力链接并延迟尝试关闭页面
 // @author       AhogeK
-// @match        *://downloadtorrentfile.com/*
-// @icon         https://downloadtorrentfile.com/favicon.ico
-// @grant        GM_setValue
-// @grant        GM_getValue
+// @match        *://*.bt4g.org/*
+// @match        *://*.bt4gprx.com/*
+// @match        *://*.bt4g.com/*
+// @grant        none
 // @updateURL    https://raw.githubusercontent.com/AhogeK/bt4g-magnet-autogen/master/bt4g-magnet-autogen.ahogek.js
 // @downloadURL  https://raw.githubusercontent.com/AhogeK/bt4g-magnet-autogen/master/bt4g-magnet-autogen.ahogek.js
 // @license      MIT
@@ -16,128 +16,63 @@
 (function() {
     'use strict';
 
-    const hash = window.location.pathname.split('/')[2];
+    // 查找所有磁力链接按钮
+    const magnetButtons = document.querySelectorAll('a.btn-primary[href*="downloadtorrentfile.com/hash/"]');
 
-    if (hash && hash.length === 40) {
-        // 生成磁力链接
-        const magnetLink = `magnet:?xt=urn:btih:${hash}`;
+    magnetButtons.forEach(button => {
+        // 从URL中提取哈希值
+        const url = new URL(button.href);
+        const pathParts = url.pathname.split('/');
+        const hash = pathParts[pathParts.length - 1].split('?')[0];
 
-        // 获取用户设置的延迟时间（默认3秒）
-        let closeDelay = localStorage.getItem('bt4g-close-delay') || 3000;
+        if (hash && hash.length === 40) {
+            // 构建真正的磁力链接
+            // 修改按钮行为和外观
+            button.href = `magnet:?xt=urn:btih:${hash}`;
+            button.setAttribute('title', '直接打开磁力链接');
+            button.removeAttribute('target'); // 移除新标签页打开
 
-        // 检查是否已经触发过下载
-        if (!sessionStorage.getItem('bt4g-download-triggered')) {
-            // 标记已触发下载
-            sessionStorage.setItem('bt4g-download-triggered', 'true');
+            // 添加新标签，表明这是直接链接
+            const badge = document.createElement('span');
+            badge.textContent = '直接';
+            badge.style.cssText = `
+                background-color: #ff5722;
+                color: white;
+                padding: 2px 5px;
+                border-radius: 3px;
+                font-size: 10px;
+                margin-left: 5px;
+                vertical-align: middle;
+            `;
 
-            // 添加设置面板（只在第一次触发时添加）
-            addSettingsPanel(closeDelay);
-
-            // 触发下载
-            window.location.href = magnetLink;
-
-            // 延迟尝试关闭页面
-            setTimeout(() => {
-                try {
-                    window.close();
-                } catch (e) {
-                    // 如果无法关闭，显示一个小通知
-                    showNotification('无法自动关闭页面，请手动关闭此标签页');
-                }
-            }, parseInt(closeDelay));
+            // 在按钮图片后面插入标记
+            const img = button.querySelector('img');
+            button.insertBefore(badge, img?.nextSibling || null);
         }
-    }
+    });
 
-    // 添加设置面板
-    function addSettingsPanel(currentDelay) {
-        const panel = document.createElement('div');
-        panel.id = 'bt4g-settings';
-        panel.style.cssText = `
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background-color: #f0f0f0;
-            border: 1px solid #ccc;
-            border-radius: 5px;
-            padding: 15px;
-            z-index: 9999;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-            font-family: Arial, sans-serif;
-        `;
+    // 可选：同样处理 Torrent Download 按钮，如果你也想改变它的行为
+    const torrentButtons = document.querySelectorAll('a.btn-success[href*="downloadtorrentfile.com/hash/"]');
 
-        panel.innerHTML = `
-            <div style="margin-bottom: 10px; font-weight: bold;">BT4G Magnet AutoGen 设置</div>
-            <div style="margin-bottom: 10px;">
-                尝试关闭页面延迟时间:
-                <select id="bt4g-delay-select" style="margin-left: 5px;">
-                    <option value="2000" ${currentDelay === 2000 ? 'selected' : ''}>2秒</option>
-                    <option value="3000" ${currentDelay === 3000 ? 'selected' : ''}>3秒</option>
-                    <option value="5000" ${currentDelay === 5000 ? 'selected' : ''}>5秒</option>
-                    <option value="10000" ${currentDelay === 10000 ? 'selected' : ''}>10秒</option>
-                </select>
-            </div>
-            <div style="display: flex; justify-content: space-between;">
-                <button id="bt4g-save-settings" style="padding: 5px 10px; cursor: pointer;">保存设置</button>
-                <button id="bt4g-close-now" style="padding: 5px 10px; cursor: pointer;">立即关闭</button>
-            </div>
-        `;
+    torrentButtons.forEach(button => {
+        // 从URL中提取哈希值
+        const url = new URL(button.href);
+        const pathParts = url.pathname.split('/');
+        const hash = pathParts[pathParts.length - 1].split('?')[0];
 
-        document.body.appendChild(panel);
+        if (hash && hash.length === 40) {
+            // 添加点击事件，拦截默认行为
+            button.addEventListener('click', function (e) {
+                // 构建磁力链接
+                const magnetLink = `magnet:?xt=urn:btih:${hash}`;
 
-        // 保存设置按钮事件
-        document.getElementById('bt4g-save-settings').addEventListener('click', function() {
-            const newDelay = document.getElementById('bt4g-delay-select').value;
-            localStorage.setItem('bt4g-close-delay', newDelay);
-            showNotification('设置已保存');
-        });
-
-        // 立即关闭按钮事件
-        document.getElementById('bt4g-close-now').addEventListener('click', function() {
-            try {
-                window.close();
-            } catch (e) {
-                showNotification('无法自动关闭页面，请手动关闭此标签页');
-            }
-        });
-    }
-
-    // 显示通知
-    function showNotification(message) {
-        const notification = document.createElement('div');
-        notification.style.cssText = `
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            background-color: #333;
-            color: white;
-            padding: 10px 20px;
-            border-radius: 5px;
-            z-index: 10000;
-            font-family: Arial, sans-serif;
-            animation: fadeIn 0.3s, fadeOut 0.3s 2.7s;
-            opacity: 0.9;
-        `;
-
-        notification.innerHTML = message;
-        document.body.appendChild(notification);
-
-        // 添加CSS动画
-        const style = document.createElement('style');
-        style.innerHTML = `
-            @keyframes fadeIn {
-                from { opacity: 0; }
-                to { opacity: 0.9; }
-            }
-            @keyframes fadeOut {
-                from { opacity: 0.9; }
-                to { opacity: 0; }
-            }
-        `;
-        document.head.appendChild(style);
-
-        // 3秒后移除通知
-        setTimeout(() => {
-            document.body.removeChild(notification);
-        }, 3000);
-    }
+                // 询问用户是否使用磁力链接
+                if (confirm('是否使用磁力链接代替种子下载？\n\n点击"确定"使用磁力链接\n点击"取消"继续下载种子文件')) {
+                    e.preventDefault(); // 阻止默认的跳转
+                    window.location.href = magnetLink; // 改用磁力链接
+                }
+                // 如果用户点击"取消"，则继续原有的种子下载流程
+            });
+        }
+    });
 })();
