@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         BT4G Magnet AutoGen
 // @namespace    https://ahogek.com
-// @version      1.0.4
-// @description  自动转换BT4G哈希到磁力链接
+// @version      1.1.0
+// @description  自动转换BT4G哈希到磁力链接 | 添加高级搜索选项：分辨率、HDR、编码、杜比音频和模糊搜索
 // @author       AhogeK
 // @match        *://*.bt4g.org/*
 // @match        *://*.bt4gprx.com/*
@@ -75,4 +75,513 @@
             });
         }
     });
+})();
+
+(function () {
+    'use strict';
+
+    // 定义关键字映射表，用于表示各种格式的常见变体
+    const keywordMaps = {
+        resolution: {
+            '720p': ['720p', '720P', 'HD'],
+            '1080p': ['1080p', '1080P', 'FHD', 'FullHD', '1920x1080'],
+            '4K/UHD': ['2160p', '2160P', '4K', '4k', 'UHD', 'UltraHD', '3840x2160', '4096x2160']
+        },
+        hdr: {
+            'HDR': ['HDR'],
+            'HDR10': ['HDR10'],
+            'HDR10+': ['HDR10+', 'HDR10Plus'],
+            'Dolby Vision': ['DV', 'DoVi', 'DolbyVision', '杜比视界']
+        },
+        codec: {
+            'H264/AVC': ['H264', 'AVC', 'h264', 'MPEG4AVC', 'x264'],
+            'H265/HEVC': ['H265', 'HEVC', 'x265', 'h265'],
+            'AV1': ['AV1'],
+            'VP9': ['VP9']
+        },
+        audio: {
+            '杜比': ['Dolby', 'DD', 'DD+', 'DDP', 'DolbyDigital', '杜比'],
+            '杜比全景声': ['Atmos', 'DolbyAtmos', '全景声', '杜比全景声'],
+            'DTS': ['DTS', 'DTSHD', 'DTSHDMA', 'DTSX'],
+            'TrueHD': ['TrueHD', 'TRUEHD']
+        }
+    };
+
+    // 等待DOM完全加载
+    window.addEventListener('load', () => {
+        // 检查是否在搜索页面
+        const searchForm = document.querySelector('form[action="/search"]');
+        if (!searchForm) return;
+
+        // 获取搜索输入框
+        const searchInput = document.getElementById('search');
+        if (!searchInput) return;
+
+        // 检测当前主题模式
+        const isDarkMode = document.body.classList.contains('dark-mode') ||
+            document.documentElement.classList.contains('dark') ||
+            document.documentElement.getAttribute('data-bs-theme') === 'dark';
+
+        // 获取URL参数
+        const urlParams = new URLSearchParams(window.location.search);
+
+        // 为搜索表单添加相对定位，这样高级搜索可以正确定位
+        searchForm.style.position = 'relative';
+
+        // 创建高级搜索选项容器
+        const advancedSearchDiv = document.createElement('div');
+        advancedSearchDiv.className = 'advanced-search mb-2';
+
+        // 根据当前主题设置样式
+        updateAdvancedSearchStyle(advancedSearchDiv, isDarkMode);
+
+        // 默认隐藏高级搜索选项
+        advancedSearchDiv.style.display = 'none';
+
+        // 添加到搜索表单中
+        searchForm.appendChild(advancedSearchDiv);
+
+        // 创建分辨率选项行
+        const resolutionRow = createOptionRow('resolution', '分辨率：', [
+            {value: '', label: '任意'},
+            {value: '720p', label: '720p/HD'},
+            {value: '1080p', label: '1080p/Full HD'},
+            {value: '4K/UHD', label: '4K/UHD/2160p'}
+        ], isDarkMode);
+        advancedSearchDiv.appendChild(resolutionRow);
+
+        // 创建HDR选项行
+        const hdrRow = createOptionRow('hdr', 'HDR：', [
+            {value: '', label: '任意'},
+            {value: 'HDR', label: 'HDR'},
+            {value: 'HDR10', label: 'HDR10'},
+            {value: 'HDR10+', label: 'HDR10+'},
+            {value: 'Dolby Vision', label: 'Dolby Vision/DV'}
+        ], isDarkMode);
+        advancedSearchDiv.appendChild(hdrRow);
+
+        // 创建编码选项行
+        const codecRow = createOptionRow('codec', '编码：', [
+            {value: '', label: '任意'},
+            {value: 'H264/AVC', label: 'H.264/AVC/x264'},
+            {value: 'H265/HEVC', label: 'H.265/HEVC/x265'},
+            {value: 'AV1', label: 'AV1'},
+            {value: 'VP9', label: 'VP9'}
+        ], isDarkMode);
+        advancedSearchDiv.appendChild(codecRow);
+
+        // 创建音频行（包含音频选项和重置按钮）
+        const audioRow = document.createElement('div');
+        audioRow.style.cssText = 'display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; width: 100%;';
+
+        // 音频选项部分
+        const audioOptions = document.createElement('div');
+        audioOptions.style.cssText = 'display: flex; align-items: center;';
+
+        // 创建音频标签
+        const audioLabel = document.createElement('span');
+        audioLabel.textContent = '音频：';
+        audioLabel.style.cssText = 'width: 80px; margin-right: 10px; white-space: nowrap; font-weight: bold;';
+        if (isDarkMode) {
+            audioLabel.style.color = '#e9ecef';
+        }
+        audioOptions.appendChild(audioLabel);
+
+        // 创建音频选项组
+        const audioChoices = [
+            {value: '', label: '任意'},
+            {value: '杜比', label: '杜比/Dolby'},
+            {value: '杜比全景声', label: '杜比全景声/Atmos'},
+            {value: 'DTS', label: 'DTS系列'},
+            {value: 'TrueHD', label: 'TrueHD'}
+        ];
+
+        const audioGroup = document.createElement('div');
+        audioGroup.style.cssText = 'display: flex; flex-wrap: wrap; gap: 5px;';
+
+        // 添加各个音频选项
+        audioChoices.forEach((choice, index) => {
+            const id = `audio_${index}`;
+
+            const radio = document.createElement('input');
+            radio.type = 'radio';
+            radio.name = 'audio';
+            radio.id = id;
+            radio.value = choice.value;
+            radio.className = 'btn-check';
+            radio.checked = index === 0; // 默认选中第一个选项
+
+            const optionLabel = document.createElement('label');
+            optionLabel.className = isDarkMode ? 'btn btn-outline-light btn-sm' : 'btn btn-outline-secondary btn-sm';
+            optionLabel.htmlFor = id;
+            optionLabel.textContent = choice.label;
+
+            audioGroup.appendChild(radio);
+            audioGroup.appendChild(optionLabel);
+        });
+
+        audioOptions.appendChild(audioGroup);
+
+        // 将音频选项部分添加到音频行
+        audioRow.appendChild(audioOptions);
+
+        // 创建重置按钮
+        const resetButton = document.createElement('button');
+        resetButton.type = 'button';
+        resetButton.className = isDarkMode ? 'btn btn-outline-light btn-sm' : 'btn btn-outline-secondary btn-sm';
+        resetButton.textContent = '重置选项';
+
+        // 添加重置按钮的点击事件
+        resetButton.addEventListener('click', () => {
+            // 重置所有单选按钮到第一个选项（"任意"）
+            ['resolution', 'hdr', 'codec', 'audio'].forEach(name => {
+                const firstOption = document.querySelector(`input[name="${name}"][id="${name}_0"]`);
+                if (firstOption) {
+                    firstOption.checked = true;
+                }
+            });
+
+            // 更新本地存储
+            const settings = {
+                resolution: '',
+                hdr: '',
+                codec: '',
+                audio: '',
+                fuzzy: true // 模糊搜索始终开启
+            };
+            localStorage.setItem('bt4g_advanced_settings', JSON.stringify(settings));
+        });
+
+        // 将重置按钮添加到音频行
+        audioRow.appendChild(resetButton);
+
+        // 将音频行添加到高级搜索容器
+        advancedSearchDiv.appendChild(audioRow);
+
+        // 设置一个隐藏字段来存储原始查询
+        const originalQueryInput = document.createElement('input');
+        originalQueryInput.type = 'hidden';
+        originalQueryInput.id = 'originalQuery';
+        searchForm.appendChild(originalQueryInput);
+
+        // 恢复上次的搜索关键词（如果有）
+        const lastSearchQuery = localStorage.getItem('bt4g_original_query') || '';
+        if (lastSearchQuery && !urlParams.has('q')) {
+            searchInput.value = lastSearchQuery;
+        }
+
+        // 存储高级搜索项
+        const storeAdvancedSettings = () => {
+            const settings = {
+                resolution: document.querySelector('input[name="resolution"]:checked')?.value || '',
+                hdr: document.querySelector('input[name="hdr"]:checked')?.value || '',
+                codec: document.querySelector('input[name="codec"]:checked')?.value || '',
+                audio: document.querySelector('input[name="audio"]:checked')?.value || '',
+                fuzzy: true // 模糊搜索始终开启
+            };
+            localStorage.setItem('bt4g_advanced_settings', JSON.stringify(settings));
+        };
+
+        // 恢复高级搜索项
+        const restoreAdvancedSettings = () => {
+            try {
+                const settings = JSON.parse(localStorage.getItem('bt4g_advanced_settings')) || {};
+                if (settings.resolution) setRadioValue('resolution', settings.resolution);
+                if (settings.hdr) setRadioValue('hdr', settings.hdr);
+                if (settings.codec) setRadioValue('codec', settings.codec);
+                if (settings.audio) setRadioValue('audio', settings.audio);
+            } catch (e) {
+                console.error('Failed to restore advanced settings:', e);
+            }
+        };
+
+        // 监听表单提交事件
+        searchForm.addEventListener('submit', function (e) {
+            e.preventDefault(); // 阻止表单默认提交
+
+            // 获取基本搜索词
+            const baseQuery = searchInput.value.trim();
+
+            // 如果搜索词为空，不进行任何操作
+            if (!baseQuery) {
+                searchForm.submit();
+                return;
+            }
+
+            // 存储原始查询
+            localStorage.setItem('bt4g_original_query', baseQuery);
+            originalQueryInput.value = baseQuery;
+
+            // 获取选中的选项
+            const resolution = document.querySelector('input[name="resolution"]:checked').value;
+            const hdr = document.querySelector('input[name="hdr"]:checked').value;
+            const codec = document.querySelector('input[name="codec"]:checked').value;
+            const audio = document.querySelector('input[name="audio"]:checked').value;
+            const fuzzy = true; // 模糊搜索始终开启
+
+            // 存储高级搜索设置
+            storeAdvancedSettings();
+
+            // 分两步构建搜索查询：先应用模糊搜索，再添加高级条件
+            let baseQueryProcessed = baseQuery;
+            let advancedConditions = [];
+
+            // 构建高级条件数组
+            if (resolution && keywordMaps.resolution[resolution]) {
+                const variants = keywordMaps.resolution[resolution];
+                if (variants.length > 0) {
+                    advancedConditions.push(`(${variants.join('|')})`);
+                }
+            }
+
+            if (hdr && keywordMaps.hdr[hdr]) {
+                const variants = keywordMaps.hdr[hdr];
+                if (variants.length > 0) {
+                    advancedConditions.push(`(${variants.join('|')})`);
+                }
+            }
+
+            if (codec && keywordMaps.codec[codec]) {
+                const variants = keywordMaps.codec[codec];
+                if (variants.length > 0) {
+                    advancedConditions.push(`(${variants.join('|')})`);
+                }
+            }
+
+            if (audio && keywordMaps.audio[audio]) {
+                const variants = keywordMaps.audio[audio];
+                if (variants.length > 0) {
+                    advancedConditions.push(`(${variants.join('|')})`);
+                }
+            }
+
+            // 应用模糊搜索仅到基本查询
+            if (fuzzy) {
+                baseQueryProcessed = baseQueryProcessed.replace(/\s+/g, ' * ');
+            }
+
+            // 合并处理后的基本查询和高级条件
+            let finalQuery = baseQueryProcessed;
+            if (advancedConditions.length > 0) {
+                finalQuery += ' ' + advancedConditions.join(' ');
+            }
+
+            // 更新搜索框的值
+            searchInput.value = finalQuery;
+
+            // 提交表单
+            searchForm.submit();
+        });
+
+        // 如果在搜索结果页面上，恢复原始查询到搜索框
+        if (urlParams.has('q')) {
+            const originalQuery = localStorage.getItem('bt4g_original_query');
+            if (originalQuery) {
+                // 延迟一点设置原始查询，以避免与BT4G自身的行为冲突
+                setTimeout(() => {
+                    searchInput.value = originalQuery;
+                }, 100);
+            }
+
+            // 恢复高级搜索设置
+            restoreAdvancedSettings();
+        }
+
+        // 添加高级搜索按钮
+        addAdvancedSearchButton(advancedSearchDiv, isDarkMode);
+
+        // 监听主题切换按钮的点击事件
+        const themeToggle = document.getElementById('theme-toggle');
+        if (themeToggle) {
+            themeToggle.addEventListener('click', () => {
+                // 给浏览器一点时间来切换主题
+                setTimeout(() => {
+                    // 重新检测主题
+                    const newDarkMode = document.body.classList.contains('dark-mode') ||
+                        document.documentElement.classList.contains('dark') ||
+                        document.documentElement.getAttribute('data-bs-theme') === 'dark';
+
+                    // 更新高级搜索样式
+                    updateAdvancedSearchStyle(advancedSearchDiv, newDarkMode);
+
+                    // 更新标签样式
+                    document.querySelectorAll('.advanced-search label').forEach(label => {
+                        if (newDarkMode) {
+                            label.style.color = '#e9ecef';
+                        } else {
+                            label.style.color = '';
+                        }
+                    });
+
+                    // 更新标题样式
+                    document.querySelectorAll('.advanced-search span').forEach(span => {
+                        if (newDarkMode) {
+                            span.style.color = '#e9ecef';
+                        } else {
+                            span.style.color = '';
+                        }
+                    });
+
+                    // 更新重置按钮样式
+                    resetButton.className = newDarkMode ? 'btn btn-outline-light btn-sm' : 'btn btn-outline-secondary btn-sm';
+                }, 100);
+            });
+        }
+    });
+
+    // 创建选项行
+    function createOptionRow(name, label, choices, isDarkMode) {
+        const row = document.createElement('div');
+        row.style.cssText = 'display: flex; align-items: center; margin-bottom: 8px; width: 100%;';
+
+        // 创建标签
+        const labelElement = document.createElement('span');
+        labelElement.textContent = label;
+        labelElement.style.cssText = 'width: 80px; margin-right: 10px; white-space: nowrap;';
+        labelElement.style.fontWeight = 'bold';
+        if (isDarkMode) {
+            labelElement.style.color = '#e9ecef';
+        }
+        row.appendChild(labelElement);
+
+        // 创建选项组
+        const optionsGroup = document.createElement('div');
+        optionsGroup.style.cssText = 'display: flex; flex-wrap: wrap; gap: 5px;';
+
+        // 添加各个选项
+        choices.forEach((choice, index) => {
+            const id = `${name}_${index}`;
+
+            const radio = document.createElement('input');
+            radio.type = 'radio';
+            radio.name = name;
+            radio.id = id;
+            radio.value = choice.value;
+            radio.className = 'btn-check';
+            radio.checked = index === 0; // 默认选中第一个选项
+
+            const optionLabel = document.createElement('label');
+            optionLabel.className = isDarkMode ? 'btn btn-outline-light btn-sm' : 'btn btn-outline-secondary btn-sm';
+            optionLabel.htmlFor = id;
+            optionLabel.textContent = choice.label;
+
+            optionsGroup.appendChild(radio);
+            optionsGroup.appendChild(optionLabel);
+        });
+
+        row.appendChild(optionsGroup);
+        return row;
+    }
+
+    // 辅助函数：设置单选按钮的值
+    function setRadioValue(name, value) {
+        const radioButtons = document.querySelectorAll(`input[name="${name}"]`);
+        let found = false;
+
+        radioButtons.forEach(radio => {
+            if (radio.value === value) {
+                radio.checked = true;
+                found = true;
+            }
+        });
+
+        // 如果没有找到匹配项，选择"任意"选项
+        if (!found && radioButtons.length > 0) {
+            radioButtons[0].checked = true;
+        }
+    }
+
+    // 更新高级搜索面板的样式，适应当前主题
+    function updateAdvancedSearchStyle(element, isDarkMode) {
+        let backgroundColor, textColor, borderColor;
+
+        if (isDarkMode) {
+            backgroundColor = '#212529';
+            textColor = '#e9ecef';
+            borderColor = '#495057';
+        } else {
+            backgroundColor = '#f8f9fa';
+            textColor = '#212529';
+            borderColor = '#dee2e6';
+        }
+
+        element.style.cssText = `
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            padding: 15px;
+            background-color: ${backgroundColor};
+            color: ${textColor};
+            border: 1px solid ${borderColor};
+            border-radius: 5px;
+            margin-top: 10px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            z-index: 1000;
+            position: absolute;
+            top: 100%;
+            left: 0;
+        `;
+    }
+
+    // 辅助函数：添加高级搜索按钮
+    function addAdvancedSearchButton(advancedSearchDiv, isDarkMode) {
+        // 找到搜索按钮
+        const searchForm = document.querySelector('form[action="/search"]');
+        const searchButtonContainer = searchForm.querySelector('.input-group');
+
+        // 创建高级搜索按钮
+        const advancedButton = document.createElement('button');
+        advancedButton.type = 'button';
+        advancedButton.className = isDarkMode ? 'btn btn-outline-light' : 'btn btn-outline-secondary';
+        advancedButton.textContent = '高级搜索 ▾';
+        advancedButton.style.cssText = `
+            margin-left: 5px;
+        `;
+
+        // 在搜索按钮后插入高级搜索按钮
+        searchButtonContainer.appendChild(advancedButton);
+
+        // 添加点击事件
+        advancedButton.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+
+            if (advancedSearchDiv.style.display === 'none') {
+                advancedSearchDiv.style.display = 'flex';
+                advancedButton.textContent = '高级搜索 ▴';
+            } else {
+                advancedSearchDiv.style.display = 'none';
+                advancedButton.textContent = '高级搜索 ▾';
+            }
+        });
+
+        // 点击页面其他位置关闭高级搜索选项
+        document.addEventListener('click', (e) => {
+            if (!advancedSearchDiv.contains(e.target) &&
+                e.target !== advancedButton &&
+                advancedSearchDiv.style.display !== 'none') {
+                advancedSearchDiv.style.display = 'none';
+                advancedButton.textContent = '高级搜索 ▾';
+            }
+        });
+
+        // 阻止高级搜索面板内部的点击事件冒泡
+        advancedSearchDiv.addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
+
+        // 监听主题切换，更新按钮样式
+        const themeToggle = document.getElementById('theme-toggle');
+        if (themeToggle) {
+            themeToggle.addEventListener('click', () => {
+                setTimeout(() => {
+                    const newDarkMode = document.body.classList.contains('dark-mode') ||
+                        document.documentElement.classList.contains('dark') ||
+                        document.documentElement.getAttribute('data-bs-theme') === 'dark';
+
+                    advancedButton.className = newDarkMode ? 'btn btn-outline-light' : 'btn btn-outline-secondary';
+                }, 100);
+            });
+        }
+    }
 })();
