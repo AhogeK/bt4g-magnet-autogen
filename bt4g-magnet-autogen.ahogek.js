@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BT4G Magnet AutoGen
 // @namespace    https://ahogek.com
-// @version      1.1.2
+// @version      1.1.3
 // @description  自动转换BT4G哈希到磁力链接 | 添加高级搜索选项：分辨率、HDR、编码、杜比音频和模糊搜索
 // @author       AhogeK
 // @match        *://*.bt4g.org/*
@@ -289,13 +289,6 @@
             if (!baseQuery) {
                 searchForm.submit();
                 return;
-            }
-
-            // 检查当前输入是否与上次保存的原始查询不同
-            const savedOriginalQuery = localStorage.getItem('bt4g_original_query') || '';
-            if (baseQuery !== savedOriginalQuery && savedOriginalQuery !== '') {
-                // 如果不同，重置高级搜索选项
-                resetAdvancedOptions();
             }
 
             // 存储原始查询
