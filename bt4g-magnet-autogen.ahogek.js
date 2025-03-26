@@ -10,6 +10,7 @@
 // @grant        GM_getValue
 // @updateURL    https://raw.githubusercontent.com/AhogeK/bt4g-magnet-autogen/master/bt4g-magnet-autogen.ahogek.js
 // @downloadURL  https://raw.githubusercontent.com/AhogeK/bt4g-magnet-autogen/master/bt4g-magnet-autogen.ahogek.js
+// @license      MIT
 // ==/UserScript==
 
 (function() {
