@@ -1,10 +1,10 @@
 // ==UserScript==
 // @name         BT4G Magnet AutoGen
 // @namespace    https://ahogek.com
-// @version      1.0.0
+// @version      1.0.1
 // @description  自动转换BT4G哈希到磁力链接并延迟尝试关闭页面
 // @author       AhogeK
-// @match        *://downloadtorrentfile.com/hash/*
+// @match        *://downloadtorrentfile.com/*
 // @icon         https://downloadtorrentfile.com/favicon.ico
 // @grant        GM_setValue
 // @grant        GM_getValue
