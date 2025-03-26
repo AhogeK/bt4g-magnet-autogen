@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BT4G Magnet AutoGen
 // @namespace    https://ahogek.com
-// @version      1.1.0
+// @version      1.1.2
 // @description  自动转换BT4G哈希到磁力链接 | 添加高级搜索选项：分辨率、HDR、编码、杜比音频和模糊搜索
 // @author       AhogeK
 // @match        *://*.bt4g.org/*
@@ -232,24 +232,7 @@
         resetButton.textContent = '重置选项';
 
         // 添加重置按钮的点击事件
-        resetButton.addEventListener('click', () => {
-            // 重置所有单选按钮到第一个选项（"任意"）
-            ['resolution', 'hdr', 'codec', 'audio'].forEach(name => {
-                const firstOption = document.querySelector(`input[name="${name}"][id="${name}_0"]`);
-                if (firstOption) {
-                    firstOption.checked = true;
-                }
-            });
-
-            // 更新本地存储
-            const settings = {
-                resolution: '',
-                hdr: '',
-                codec: '',
-                audio: '',
-            };
-            localStorage.setItem('bt4g_advanced_settings', JSON.stringify(settings));
-        });
+        resetButton.addEventListener('click', resetAdvancedOptions);
 
         // 将重置按钮添加到音频行
         audioRow.appendChild(resetButton);
@@ -306,6 +289,13 @@
             if (!baseQuery) {
                 searchForm.submit();
                 return;
+            }
+
+            // 检查当前输入是否与上次保存的原始查询不同
+            const savedOriginalQuery = localStorage.getItem('bt4g_original_query') || '';
+            if (baseQuery !== savedOriginalQuery && savedOriginalQuery !== '') {
+                // 如果不同，重置高级搜索选项
+                resetAdvancedOptions();
             }
 
             // 存储原始查询
@@ -365,6 +355,26 @@
 
             // 提交表单
             searchForm.submit();
+        }
+
+        // 重置高级搜索选项函数
+        function resetAdvancedOptions() {
+            // 重置所有单选按钮到第一个选项（"任意"）
+            ['resolution', 'hdr', 'codec', 'audio'].forEach(name => {
+                const firstOption = document.querySelector(`input[name="${name}"][id="${name}_0"]`);
+                if (firstOption) {
+                    firstOption.checked = true;
+                }
+            });
+
+            // 更新本地存储
+            const settings = {
+                resolution: '',
+                hdr: '',
+                codec: '',
+                audio: '',
+            };
+            localStorage.setItem('bt4g_advanced_settings', JSON.stringify(settings));
         }
 
         // 监听表单提交事件
