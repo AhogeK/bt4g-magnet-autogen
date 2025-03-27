@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BT4G Magnet AutoGen
 // @namespace    https://ahogek.com
-// @version      1.1.5
+// @version      1.2.0
 // @description  自动转换BT4G哈希到磁力链接 | 添加高级搜索选项：分辨率、HDR、编码、杜比音频和模糊搜索
 // @author       AhogeK
 // @match        *://*.bt4g.org/*
@@ -179,7 +179,7 @@
         if (isDarkMode) {
             audioLabel.style.color = '#e9ecef';
         } else {
-            audioLabel.style.color = '#212529'; // 确保亮色模式下标签文字颜色为深色
+            audioLabel.style.color = '#212529';
         }
         audioOptions.appendChild(audioLabel);
 
@@ -205,10 +205,10 @@
             radio.id = id;
             radio.value = choice.value;
             radio.className = 'btn-check';
-            radio.checked = index === 0; // 默认选中第一个选项
+            radio.checked = index === 0;
 
             const optionLabel = document.createElement('label');
-            optionLabel.className = isDarkMode ? 'btn btn-outline-light btn-sm' : 'btn btn-outline-dark btn-sm'; // 改为outline-dark
+            optionLabel.className = isDarkMode ? 'btn btn-outline-light btn-sm' : 'btn btn-outline-dark btn-sm';
             optionLabel.htmlFor = id;
             optionLabel.textContent = choice.label;
 
@@ -224,7 +224,7 @@
         // 创建重置按钮
         const resetButton = document.createElement('button');
         resetButton.type = 'button';
-        resetButton.className = isDarkMode ? 'btn btn-outline-light btn-sm' : 'btn btn-outline-dark btn-sm'; // 改为outline-dark
+        resetButton.className = isDarkMode ? 'btn btn-outline-light btn-sm' : 'btn btn-outline-dark btn-sm';
         resetButton.textContent = '重置选项';
 
         // 添加重置按钮的点击事件
@@ -376,18 +376,40 @@
             }
         });
 
-        // 如果在搜索结果页面上，恢复原始查询到搜索框
+        // 添加搜索结果链接的监听器
+        function addResultLinkListeners() {
+            // 查找所有可能是搜索结果的链接
+            const resultLinks = document.querySelectorAll('a[href^="/magnet/"]');
+
+            resultLinks.forEach(link => {
+                link.addEventListener('click', () => {
+                    // 在用户点击链接时保存高级搜索设置
+                    storeAdvancedSettings();
+                });
+            });
+        }
+
+        // 调用函数添加链接监听器
+        // 使用MutationObserver来处理动态加载的内容
+        const observer = new MutationObserver((mutations) => {
+            addResultLinkListeners();
+        });
+        observer.observe(document.body, {childList: true, subtree: true});
+
+        // 初始化时也添加一次
+        addResultLinkListeners();
+
+        // 始终尝试恢复高级搜索设置，无论页面类型
+        restoreAdvancedSettings();
+
+        // 只在搜索结果页恢复原始查询到搜索框
         if (urlParams.has('q')) {
             const originalQuery = localStorage.getItem('bt4g_original_query');
             if (originalQuery) {
-                // 延迟一点设置原始查询，以避免与BT4G自身的行为冲突
                 setTimeout(() => {
                     searchInput.value = originalQuery;
                 }, 100);
             }
-
-            // 恢复高级搜索设置
-            restoreAdvancedSettings();
         }
 
         // 监听主题切换按钮的点击事件
