@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BT4G Magnet AutoGen
 // @namespace    https://ahogek.com
-// @version      1.2.2
+// @version      1.2.3
 // @description  自动转换BT4G哈希到磁力链接 | 添加高级搜索选项：分辨率、HDR、编码、杜比音频和模糊搜索 | 删除资源恢复
 // @author       AhogeK
 // @match        *://*.bt4g.org/*
@@ -91,11 +91,11 @@
             'HDR': ['HDR'],
             'HDR10': ['HDR10'],
             'HDR10+': ['HDR10+', 'HDR10Plus'],
-            'Dolby Vision': ['DV', 'DoVi', 'DolbyVision', '杜比视界']
+            'Dolby Vision': ['DV', 'DoVi', 'DolbyVision']
         },
         codec: {
-            'H264/AVC': ['H264', 'AVC', 'h264', 'MPEG4AVC', 'x264'],
-            'H265/HEVC': ['H265', 'HEVC', 'x265', 'h265'],
+            'H264/AVC': ['H264', 'H 264', 'AVC', 'h264', 'MPEG4AVC', 'x264'],
+            'H265/HEVC': ['H265', 'H 265', 'HEVC', 'x265', 'h265'],
             'AV1': ['AV1'],
             'VP9': ['VP9']
         },
@@ -107,7 +107,7 @@
             'DVD': ['DVD', 'DVDRIP', 'DVD-RIP']
         },
         audio: {
-            '杜比': ['Dolby', 'DD', 'DD+', 'DDP', 'DolbyDigital', '杜比'],
+            '杜比': ['Dolby', 'DD', 'DD+', 'DDP', 'DolbyDigital', 'DDP5 1'],
             '杜比全景声': ['Atmos', 'DolbyAtmos'],
             'DTS': ['DTS', 'DTSHD', 'DTSHDMA', 'DTSX'],
             'TrueHD': ['TrueHD', 'TRUEHD']
