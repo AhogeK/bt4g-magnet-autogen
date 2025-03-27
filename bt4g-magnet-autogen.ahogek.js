@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         BT4G Magnet AutoGen
 // @namespace    https://ahogek.com
-// @version      1.2.0
-// @description  自动转换BT4G哈希到磁力链接 | 添加高级搜索选项：分辨率、HDR、编码、杜比音频和模糊搜索
+// @version      1.2.1
+// @description  自动转换BT4G哈希到磁力链接 | 添加高级搜索选项：分辨率、HDR、编码、杜比音频和模糊搜索 | 删除资源恢复
 // @author       AhogeK
 // @match        *://*.bt4g.org/*
 // @match        *://*.bt4gprx.com/*
@@ -543,4 +543,137 @@
      margin-bottom: 10px;
    `;
     }
+})();
+
+// 添加处理被删除内容的直接磁链功能
+(function () {
+    'use strict';
+
+    // 等待DOM完全加载
+    window.addEventListener('load', () => {
+        // 检查是否在资源详细页面且内容已被删除
+        const paragraphs = document.querySelectorAll('div.col-12 p');
+        let deletedContentP = null;
+
+        for (const p of paragraphs) {
+            if (p.textContent.includes('On request, content has been deleted')) {
+                deletedContentP = p;
+                break;
+            }
+        }
+
+        if (!deletedContentP) {
+            return; // 不是删除内容页面，直接返回
+        }
+
+        // 尝试从meta标签中获取哈希值
+        const metaOgUrl = document.querySelector('meta[property="og:url"]');
+
+        if (!metaOgUrl) {
+            return; // 没有找到包含哈希的meta标签
+        }
+
+        // 从meta标签的content属性中提取哈希值
+        const urlContent = metaOgUrl.getAttribute('content');
+        const hashMatch = urlContent.match(/\/([a-fA-F0-9]{40})(?:\?|$)/);
+
+        if (!hashMatch || !hashMatch[1]) {
+            return; // 没有找到有效的40位哈希值
+        }
+
+        const hash = hashMatch[1];
+        const magnetLink = `magnet:?xt=urn:btih:${hash}`;
+
+        // 检测当前主题模式
+        const isDarkMode = document.body.classList.contains('dark-mode') ||
+            document.documentElement.classList.contains('dark') ||
+            document.documentElement.getAttribute('data-bs-theme') === 'dark';
+
+        // 创建一个容器，用于更好的样式布局
+        const buttonContainer = document.createElement('div');
+        buttonContainer.style.cssText = 'margin-top: 20px; text-align: center;';
+
+        // 创建说明文本
+        const infoText = document.createElement('p');
+        infoText.textContent = '虽然内容显示已删除，但您仍可通过以下方式获取资源：';
+        infoText.style.cssText = 'margin-bottom: 10px; font-style: italic; color: ' + (isDarkMode ? '#adb5bd' : '#6c757d');
+        buttonContainer.appendChild(infoText);
+
+        // 创建打开磁力链接按钮
+        const magnetButton = document.createElement('a');
+        magnetButton.href = magnetLink;
+        magnetButton.className = 'btn btn-success';
+        magnetButton.innerHTML = '🧲 打开磁力链接';
+        magnetButton.style.cssText = 'padding: 8px 15px; font-weight: bold;';
+        buttonContainer.appendChild(magnetButton);
+
+        // 创建显示磁力链接的元素（方便用户手动复制）
+        const hashDisplay = document.createElement('div');
+        hashDisplay.textContent = magnetLink;
+        hashDisplay.style.cssText = 'margin-top: 10px; font-family: monospace; word-break: break-all; ' +
+            'border: 1px solid ' + (isDarkMode ? '#495057' : '#dee2e6') + '; ' +
+            'padding: 6px; border-radius: 4px; ' +
+            'background-color: ' + (isDarkMode ? '#343a40' : '#f8f9fa') + '; ' +
+            'color: ' + (isDarkMode ? '#adb5bd' : '#6c757d') + '; font-size: 0.9em; ' +
+            'max-width: 100%; overflow-x: auto; text-align: left; cursor: pointer;';
+
+        // 点击磁力链接文本区域时复制到剪贴板
+        hashDisplay.addEventListener('click', function () {
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(magnetLink).then(() => {
+                    const originalText = hashDisplay.textContent;
+                    hashDisplay.textContent = '✅ 已复制到剪贴板';
+                    setTimeout(() => {
+                        hashDisplay.textContent = originalText;
+                    }, 1000);
+                });
+            } else {
+                const textArea = document.createElement('textarea');
+                textArea.value = magnetLink;
+                textArea.style.position = 'fixed';
+                textArea.style.left = '-9999px';
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+
+                try {
+                    document.execCommand('copy');
+                    const originalText = hashDisplay.textContent;
+                    hashDisplay.textContent = '✅ 已复制到剪贴板';
+                    setTimeout(() => {
+                        hashDisplay.textContent = originalText;
+                    }, 1000);
+                } catch (err) {
+                    console.error('复制失败:', err);
+                }
+
+                document.body.removeChild(textArea);
+            }
+        });
+
+        buttonContainer.appendChild(hashDisplay);
+
+        // 将按钮容器添加到内容已删除的消息所在的div中
+        deletedContentP.parentNode.appendChild(buttonContainer);
+
+        // 监听主题切换以更新元素样式
+        const themeToggle = document.getElementById('theme-toggle');
+        if (themeToggle) {
+            themeToggle.addEventListener('click', () => {
+                // 给浏览器一点时间来切换主题
+                setTimeout(() => {
+                    // 重新检测主题
+                    const newDarkMode = document.body.classList.contains('dark-mode') ||
+                        document.documentElement.classList.contains('dark') ||
+                        document.documentElement.getAttribute('data-bs-theme') === 'dark';
+
+                    // 更新文本颜色和样式
+                    infoText.style.color = newDarkMode ? '#adb5bd' : '#6c757d';
+                    hashDisplay.style.color = newDarkMode ? '#adb5bd' : '#6c757d';
+                    hashDisplay.style.backgroundColor = newDarkMode ? '#343a40' : '#f8f9fa';
+                    hashDisplay.style.borderColor = newDarkMode ? '#495057' : '#dee2e6';
+                }, 100);
+            });
+        }
+    });
 })();
