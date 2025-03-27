@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BT4G Magnet AutoGen
 // @namespace    https://ahogek.com
-// @version      1.2.1
+// @version      1.2.2
 // @description  自动转换BT4G哈希到磁力链接 | 添加高级搜索选项：分辨率、HDR、编码、杜比音频和模糊搜索 | 删除资源恢复
 // @author       AhogeK
 // @match        *://*.bt4g.org/*
@@ -99,6 +99,13 @@
             'AV1': ['AV1'],
             'VP9': ['VP9']
         },
+        mediaType: {
+            'BD': ['BD', 'BLURAY', 'BLU-RAY', 'BDMV', 'BDREMUX', 'REMUX'],
+            'WEB-DL': ['WEB-DL', 'WEBDL', 'WEB.DL'],
+            'WEB': ['WEB', 'WEBRIP', 'WEB-RIP', 'WEBRip'],
+            'HDTV': ['HDTV', 'TV'],
+            'DVD': ['DVD', 'DVDRIP', 'DVD-RIP']
+        },
         audio: {
             '杜比': ['Dolby', 'DD', 'DD+', 'DDP', 'DolbyDigital', '杜比'],
             '杜比全景声': ['Atmos', 'DolbyAtmos'],
@@ -163,6 +170,17 @@
             {value: 'VP9', label: 'VP9'}
         ], isDarkMode);
         advancedSearchDiv.appendChild(codecRow);
+
+        // 创建媒体类型选项行
+        const mediaTypeRow = createOptionRow('mediaType', '媒体类型：', [
+            {value: '', label: '任意'},
+            {value: 'BD', label: 'BD/蓝光/REMUX'},
+            {value: 'WEB-DL', label: 'WEB-DL'},
+            {value: 'WEB', label: 'WEB/WEBRip'},
+            {value: 'HDTV', label: 'HDTV'},
+            {value: 'DVD', label: 'DVD'}
+        ], isDarkMode);
+        advancedSearchDiv.appendChild(mediaTypeRow);
 
         // 创建音频行（包含音频选项和重置按钮）
         const audioRow = document.createElement('div');
@@ -254,6 +272,7 @@
                 resolution: document.querySelector('input[name="resolution"]:checked')?.value || '',
                 hdr: document.querySelector('input[name="hdr"]:checked')?.value || '',
                 codec: document.querySelector('input[name="codec"]:checked')?.value || '',
+                mediaType: document.querySelector('input[name="mediaType"]:checked')?.value || '',
                 audio: document.querySelector('input[name="audio"]:checked')?.value || '',
             };
             localStorage.setItem('bt4g_advanced_settings', JSON.stringify(settings));
@@ -266,6 +285,7 @@
                 if (settings.resolution) setRadioValue('resolution', settings.resolution);
                 if (settings.hdr) setRadioValue('hdr', settings.hdr);
                 if (settings.codec) setRadioValue('codec', settings.codec);
+                if (settings.mediaType) setRadioValue('mediaType', settings.mediaType);
                 if (settings.audio) setRadioValue('audio', settings.audio);
             } catch (e) {
                 console.error('Failed to restore advanced settings:', e);
@@ -295,6 +315,7 @@
             const resolution = document.querySelector('input[name="resolution"]:checked').value;
             const hdr = document.querySelector('input[name="hdr"]:checked').value;
             const codec = document.querySelector('input[name="codec"]:checked').value;
+            const mediaType = document.querySelector('input[name="mediaType"]:checked').value;
             const audio = document.querySelector('input[name="audio"]:checked').value;
 
             // 存储高级搜索设置
@@ -326,6 +347,13 @@
                 }
             }
 
+            if (mediaType && keywordMaps.mediaType[mediaType]) {
+                const variants = keywordMaps.mediaType[mediaType];
+                if (variants.length > 0) {
+                    advancedConditions.push(`(${variants.join('|')})`);
+                }
+            }
+
             if (audio && keywordMaps.audio[audio]) {
                 const variants = keywordMaps.audio[audio];
                 if (variants.length > 0) {
@@ -349,7 +377,7 @@
         // 重置高级搜索选项函数
         function resetAdvancedOptions() {
             // 重置所有单选按钮到第一个选项（"任意"）
-            ['resolution', 'hdr', 'codec', 'audio'].forEach(name => {
+            ['resolution', 'hdr', 'codec', 'mediaType', 'audio'].forEach(name => {
                 const firstOption = document.querySelector(`input[name="${name}"][id="${name}_0"]`);
                 if (firstOption) {
                     firstOption.checked = true;
@@ -361,6 +389,7 @@
                 resolution: '',
                 hdr: '',
                 codec: '',
+                mediaType: '',
                 audio: '',
             };
             localStorage.setItem('bt4g_advanced_settings', JSON.stringify(settings));
@@ -532,16 +561,16 @@
         }
 
         element.style.cssText = `
-     display: flex;
-     flex-direction: column;
-     width: 100%;
-     padding: 12px;
-     background-color: ${backgroundColor};
-     color: ${textColor};
-     border: 1px solid ${borderColor};
-     border-radius: 5px;
-     margin-bottom: 10px;
-   `;
+            display: flex;
+            flex-direction: column;
+            width: 100%;
+            padding: 12px;
+            background-color: ${backgroundColor};
+            color: ${textColor};
+            border: 1px solid ${borderColor};
+            border-radius: 5px;
+            margin-bottom: 10px;
+        `;
     }
 })();
 
