@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         BT4G Magnet AutoGen
 // @namespace    https://ahogek.com
-// @version      1.2.3
-// @description  自动转换BT4G哈希到磁力链接 | 添加高级搜索选项：分辨率、HDR、编码、杜比音频和模糊搜索 | 删除资源恢复
+// @version      1.3.0
+// @description  自动转换BT4G哈希到磁力链接 | 添加高级搜索选项：分辨率、HDR、编码、杜比音频和模糊搜索 | 删除资源恢复 | 广告拦截（未精准测试）
 // @author       AhogeK
 // @match        *://*.bt4g.org/*
 // @match        *://*.bt4gprx.com/*
@@ -94,23 +94,23 @@
             'Dolby Vision': ['DV', 'DoVi', 'DolbyVision']
         },
         codec: {
-            'H264/AVC': ['H264', 'H 264', 'AVC', 'h264', 'MPEG4AVC', 'x264'],
-            'H265/HEVC': ['H265', 'H 265', 'HEVC', 'x265', 'h265'],
+            'H264/AVC': ['H264', '264', 'AVC', 'h264', 'MPEG4AVC', 'x264'],
+            'H265/HEVC': ['H265', '265', 'HEVC', 'x265', 'h265'],
             'AV1': ['AV1'],
             'VP9': ['VP9']
         },
         mediaType: {
-            'BD': ['BD', 'BLURAY', 'BLU-RAY', 'BDMV', 'BDREMUX', 'REMUX'],
-            'WEB-DL': ['WEB-DL', 'WEBDL', 'WEB.DL'],
-            'WEB': ['WEB', 'WEBRIP', 'WEB-RIP', 'WEBRip'],
+            'BD': ['BD', 'BLURAY', 'BDMV', 'BDREMUX', 'REMUX'],
+            'WEB-DL': ['WEBDL'],
+            'WEB': ['WEB', 'WEBRIP', 'WEBRip'],
             'HDTV': ['HDTV', 'TV'],
-            'DVD': ['DVD', 'DVDRIP', 'DVD-RIP']
+            'DVD': ['DVD', 'DVDRIP']
         },
         audio: {
             '杜比': ['Dolby', 'DD', 'DD+', 'DDP', 'DolbyDigital', 'DDP5 1'],
             '杜比全景声': ['Atmos', 'DolbyAtmos'],
             'DTS': ['DTS', 'DTSHD', 'DTSHDMA', 'DTSX'],
-            'TrueHD': ['TrueHD', 'TRUEHD']
+            'TrueHD': ['TrueHD', 'TRUEHD', 'TrueHD7']
         }
     };
 
@@ -705,4 +705,182 @@
             });
         }
     });
+})();
+
+// 去除广告弹窗和叠加层功能
+(function () {
+    'use strict';
+
+    // BT4G网站上可能的广告叠加层选择器
+    const overlaySelectors = [
+        // 常见广告层选择器
+        'div[style*="position: fixed"]',
+        'div[style*="z-index: 999"]',
+        'div[class*="ad-"]',
+        'div[class*="popup"]',
+        'div[class*="overlay"]',
+        'div[id*="ad-"]',
+        'div[id*="popup"]',
+        'div[id*="overlay"]',
+        // 针对可能的弹窗广告
+        'div.modal.fade.show',
+        'div.modal-backdrop',
+        'div[style*="pointer-events"]',
+        'iframe[src*="ad"]'
+    ];
+
+    // 检测和删除叠加层
+    function removeOverlays() {
+        // 恢复被禁用的滚动
+        if (document.body.style.overflow === 'hidden') {
+            document.body.style.overflow = '';
+        }
+
+        // 删除匹配的叠加层
+        overlaySelectors.forEach(selector => {
+            const elements = document.querySelectorAll(selector);
+            elements.forEach(el => {
+                // 确保不删除页面上需要的元素
+                if (el && isOverlay(el) && !isEssentialElement(el)) {
+                    console.log('移除广告叠加层:', el);
+                    el.remove();
+                }
+            });
+        });
+    }
+
+    // 判断元素是否为叠加层
+    function isOverlay(element) {
+        const style = window.getComputedStyle(element);
+        const position = style.getPropertyValue('position');
+        const zIndex = parseInt(style.getPropertyValue('z-index'), 10);
+        const opacity = parseFloat(style.getPropertyValue('opacity'));
+
+        // 叠加层特征：固定/绝对定位 + 高z-index + 可见
+        return (position === 'fixed' || position === 'absolute') &&
+            ((zIndex > 100) ||
+                (style.getPropertyValue('display') !== 'none' && opacity > 0));
+    }
+
+    // 判断是否为页面必要元素
+    function isEssentialElement(element) {
+        // 检查是否包含重要的页面功能元素
+        const isNavbar = element.classList.contains('navbar') ||
+            element.id === 'header' ||
+            element.querySelector('.navbar');
+
+        // 检查是否是BT4G的搜索表单或重要UI元素
+        const isSearchForm = element.querySelector('form[action="/search"]') ||
+            element.classList.contains('advanced-search');
+
+        // 检查是否包含磁力按钮
+        const hasMagnetButton = element.querySelector('a[href^="magnet:"]') ||
+            element.querySelector('.btn-primary');
+
+        return isNavbar || isSearchForm || hasMagnetButton;
+    }
+
+    // 阻止全局事件捕获可能导致弹窗的行为
+    function preventPopupEvents() {
+        // 重定义window.open，阻止弹窗广告
+        if (!window.originalOpen) {
+            window.originalOpen = window.open;
+            window.open = function (url, name, params) {
+                // 检查是否是网站内部链接或磁力链接
+                if (url && (url.startsWith(location.origin) || url.startsWith('/') || url.startsWith('magnet:'))) {
+                    return window.originalOpen(url, name, params);
+                } else {
+                    console.log('拦截弹窗:', url);
+                    return null;
+                }
+            };
+        }
+
+        // 阻止页面级别的点击劫持
+        document.addEventListener('click', function (e) {
+            // 处理非链接和按钮的全页面点击
+            const isLinkOrButton = e.target.tagName === 'A' ||
+                e.target.tagName === 'BUTTON' ||
+                e.target.closest('a') ||
+                e.target.closest('button');
+
+            if (!isLinkOrButton && e.currentTarget === document) {
+                // 检查是否点击了覆盖整个页面的元素
+                const rect = e.target.getBoundingClientRect();
+                const isFullPageOverlay = (rect.width > window.innerWidth * 0.9 &&
+                    rect.height > window.innerHeight * 0.9);
+
+                if (isFullPageOverlay) {
+                    e.stopPropagation();
+                    e.preventDefault();
+                    console.log('阻止可疑的全页面点击');
+                    removeOverlays();
+                }
+            }
+        }, true); // 使用捕获阶段
+    }
+
+    // 清理可能的内联事件处理程序
+    function cleanupInlineEvents() {
+        // 查找并清理可疑的内联事件
+        const suspiciousElements = document.querySelectorAll('[onclick], [onmousedown], [onmouseup]');
+        suspiciousElements.forEach(el => {
+            const onclick = el.getAttribute('onclick') || '';
+            const onmousedown = el.getAttribute('onmousedown') || '';
+            const onmouseup = el.getAttribute('onmouseup') || '';
+
+            if (onclick.includes('window.open') ||
+                onclick.includes('popup') ||
+                onmousedown.includes('window.open') ||
+                onmouseup.includes('window.open')) {
+
+                console.log('移除可疑内联事件:', onclick || onmousedown || onmouseup);
+                el.removeAttribute('onclick');
+                el.removeAttribute('onmousedown');
+                el.removeAttribute('onmouseup');
+            }
+        });
+    }
+
+    // 主函数：初始化广告拦截器
+    function initAdBlocker() {
+        console.log('BT4G 广告拦截器已激活');
+
+        // 立即执行一次清理
+        removeOverlays();
+        preventPopupEvents();
+        cleanupInlineEvents();
+
+        // 创建MutationObserver监视DOM变化
+        const observer = new MutationObserver(() => {
+            removeOverlays();
+            cleanupInlineEvents();
+        });
+
+        // 开始观察文档体的变化
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+            attributeFilter: ['style', 'class']
+        });
+
+        // 定期检查，确保不遗漏动态添加的元素
+        setInterval(removeOverlays, 1000);
+
+        // 添加鼠标移动监听，某些广告会在鼠标移动时触发
+        document.addEventListener('mousemove', () => {
+            setTimeout(removeOverlays, 100);
+        }, {passive: true});
+    }
+
+    // 在DOMContentLoaded时开始初始拦截
+    document.addEventListener('DOMContentLoaded', () => {
+        removeOverlays();
+        preventPopupEvents();
+    });
+
+    // 页面完全加载后启动完整的广告拦截器
+    window.addEventListener('load', initAdBlocker);
+
 })();
