@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BT4G Magnet AutoGen
 // @namespace    https://ahogek.com
-// @version      1.3.0
+// @version      1.3.1
 // @description  自动转换BT4G哈希到磁力链接 | 添加高级搜索选项：分辨率、HDR、编码、杜比音频和模糊搜索 | 删除资源恢复 | 广告拦截（未精准测试）
 // @author       AhogeK
 // @match        *://*.bt4g.org/*
@@ -80,40 +80,6 @@
 (function () {
     'use strict';
 
-    // 定义关键字映射表，用于表示各种格式的常见变体
-    const keywordMaps = {
-        resolution: {
-            '720p': ['720p', '720P', 'HD'],
-            '1080p': ['1080p', '1080P', 'HD1080P', 'FHD', 'FullHD', '1920x1080'],
-            '4K/UHD': ['2160p', '2160P', '4K', '4k', 'UHD', 'UltraHD', '3840x2160', '4096x2160']
-        },
-        hdr: {
-            'HDR': ['HDR'],
-            'HDR10': ['HDR10'],
-            'HDR10+': ['HDR10+', 'HDR10Plus'],
-            'Dolby Vision': ['DV', 'DoVi', 'DolbyVision']
-        },
-        codec: {
-            'H264/AVC': ['H264', '264', 'AVC', 'h264', 'MPEG4AVC', 'x264'],
-            'H265/HEVC': ['H265', '265', 'HEVC', 'x265', 'h265'],
-            'AV1': ['AV1'],
-            'VP9': ['VP9']
-        },
-        mediaType: {
-            'BD': ['BD', 'BLURAY', 'BDMV', 'BDREMUX', 'REMUX'],
-            'WEB-DL': ['WEBDL'],
-            'WEB': ['WEB', 'WEBRIP', 'WEBRip'],
-            'HDTV': ['HDTV', 'TV'],
-            'DVD': ['DVD', 'DVDRIP']
-        },
-        audio: {
-            '杜比': ['Dolby', 'DD', 'DD+', 'DDP', 'DolbyDigital', 'DDP5 1'],
-            '杜比全景声': ['Atmos', 'DolbyAtmos'],
-            'DTS': ['DTS', 'DTSHD', 'DTSHDMA', 'DTSX'],
-            'TrueHD': ['TrueHD', 'TRUEHD', 'TrueHD7']
-        }
-    };
-
     // 等待DOM完全加载
     window.addEventListener('load', () => {
         // 检查是否在搜索页面
@@ -123,6 +89,50 @@
         // 获取搜索输入框
         const searchInput = document.getElementById('search');
         if (!searchInput) return;
+
+        // 检查页面上是否已经存在高级搜索选项容器
+        if (document.querySelector('.advanced-search')) {
+            console.log('高级搜索选项已存在，跳过创建');
+            return;
+        }
+
+        // 使用一个全局标识符确保只初始化一次
+        if (window.bt4gAdvancedSearchInitialized) return;
+        window.bt4gAdvancedSearchInitialized = true;
+
+        // 定义关键字映射表，用于表示各种格式的常见变体
+        const keywordMaps = {
+            resolution: {
+                '720p': ['720p', '720P', 'HD'],
+                '1080p': ['1080p', '1080P', 'HD1080P', 'FHD', 'FullHD', '1920x1080'],
+                '4K/UHD': ['2160p', '2160P', '4K', '4k', 'UHD', 'UltraHD', '3840x2160', '4096x2160']
+            },
+            hdr: {
+                'HDR': ['HDR'],
+                'HDR10': ['HDR10'],
+                'HDR10+': ['HDR10+', 'HDR10Plus'],
+                'Dolby Vision': ['DV', 'DoVi', 'DolbyVision']
+            },
+            codec: {
+                'H264/AVC': ['H264', '264', 'AVC', 'h264', 'MPEG4AVC', 'x264'],
+                'H265/HEVC': ['H265', '265', 'HEVC', 'x265', 'h265'],
+                'AV1': ['AV1'],
+                'VP9': ['VP9']
+            },
+            mediaType: {
+                'BD': ['BD', 'BLURAY', 'BDMV', 'BDREMUX', 'REMUX'],
+                'WEB-DL': ['WEBDL'],
+                'WEB': ['WEB', 'WEBRIP', 'WEBRip'],
+                'HDTV': ['HDTV', 'TV'],
+                'DVD': ['DVD', 'DVDRIP']
+            },
+            audio: {
+                '杜比': ['Dolby', 'DD', 'DD+', 'DDP', 'DolbyDigital', 'DDP5 1'],
+                '杜比全景声': ['Atmos', 'DolbyAtmos'],
+                'DTS': ['DTS', 'DTSHD', 'DTSHDMA', 'DTSX'],
+                'TrueHD': ['TrueHD', 'TRUEHD', 'TrueHD7']
+            }
+        };
 
         // 检测当前主题模式
         const isDarkMode = document.body.classList.contains('dark-mode') ||
@@ -135,6 +145,7 @@
         // 创建高级搜索选项容器，直接放在搜索框下方
         const advancedSearchDiv = document.createElement('div');
         advancedSearchDiv.className = 'advanced-search mb-3 mt-2';
+        advancedSearchDiv.setAttribute('data-initialized', 'true');
 
         // 应用固定样式而非弹出样式
         updateFixedAdvancedSearchStyle(advancedSearchDiv, isDarkMode);
@@ -561,16 +572,16 @@
         }
 
         element.style.cssText = `
-            display: flex;
-            flex-direction: column;
-            width: 100%;
-            padding: 12px;
-            background-color: ${backgroundColor};
-            color: ${textColor};
-            border: 1px solid ${borderColor};
-            border-radius: 5px;
-            margin-bottom: 10px;
-        `;
+           display: flex;
+           flex-direction: column;
+           width: 100%;
+           padding: 12px;
+           background-color: ${backgroundColor};
+           color: ${textColor};
+           border: 1px solid ${borderColor};
+           border-radius: 5px;
+           margin-bottom: 10px;
+       `;
     }
 })();
 
