@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         BT4G Magnet AutoGen
 // @namespace    https://ahogek.com
-// @version      1.3.1
+// @version      1.3.2
 // @description  自动转换BT4G哈希到磁力链接 | 添加高级搜索选项：分辨率、HDR、编码、杜比音频和模糊搜索 | 删除资源恢复 | 广告拦截（未精准测试）
 // @author       AhogeK
 // @match        *://*.bt4g.org/*
@@ -431,7 +431,7 @@
 
         // 调用函数添加链接监听器
         // 使用MutationObserver来处理动态加载的内容
-        const observer = new MutationObserver((mutations) => {
+        const observer = new MutationObserver(() => {
             addResultLinkListeners();
         });
         observer.observe(document.body, {childList: true, subtree: true});
@@ -615,9 +615,9 @@
 
         // 从meta标签的content属性中提取哈希值
         const urlContent = metaOgUrl.getAttribute('content');
-        const hashMatch = urlContent.match(/\/([a-fA-F0-9]{40})(?:\?|$)/);
+        const hashMatch = RegExp(/\/([a-fA-F0-9]{40})(?:\?|$)/).exec(urlContent);
 
-        if (!hashMatch || !hashMatch[1]) {
+        if (!hashMatch?.[1]) {
             return; // 没有找到有效的40位哈希值
         }
 
@@ -676,16 +676,18 @@
                 textArea.focus();
                 textArea.select();
 
-                try {
-                    document.execCommand('copy');
-                    const originalText = hashDisplay.textContent;
-                    hashDisplay.textContent = '✅ 已复制到剪贴板';
-                    setTimeout(() => {
-                        hashDisplay.textContent = originalText;
-                    }, 1000);
-                } catch (err) {
-                    console.error('复制失败:', err);
-                }
+                hashDisplay.addEventListener('click', async function () {
+                    try {
+                        await navigator.clipboard.writeText(magnetLink);
+                        const originalText = hashDisplay.textContent;
+                        hashDisplay.textContent = '✅ 已复制到剪贴板';
+                        setTimeout(() => {
+                            hashDisplay.textContent = originalText;
+                        }, 1000);
+                    } catch (err) {
+                        console.error('复制失败:', err);
+                    }
+                });
 
                 document.body.removeChild(textArea);
             }
