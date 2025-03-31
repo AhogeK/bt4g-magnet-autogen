@@ -1,14 +1,17 @@
 // ==UserScript==
 // @name            BT4G Magnet AutoGen
 // @namespace       https://ahogek.com
-// @version         1.3.3
+// @version         1.3.4
 // @description     自动转换BT4G哈希到磁力链接 | 添加高级搜索选项：分辨率、HDR、编码、杜比音频和模糊搜索 | 删除资源恢复 | 广告拦截（未精准测试）
 // @author          AhogeK
 // @match           *://*.bt4g.org/*
 // @match           *://*.bt4gprx.com/*
 // @match           *://*.bt4g.com/*
 // @match           *://*.downloadtorrentfile.com/hash/*
-// @grant           none
+// @grant           GM_xmlhttpRequest
+// @connect         itorrents.org
+// @connect         btcache.me
+// @connect         thetorrent.org
 // @updateURL       https://raw.githubusercontent.com/AhogeK/bt4g-magnet-autogen/master/bt4g-magnet-autogen.ahogek.js
 // @downloadURL     https://raw.githubusercontent.com/AhogeK/bt4g-magnet-autogen/master/bt4g-magnet-autogen.ahogek.js
 // @license         MIT
@@ -51,6 +54,184 @@
             button.insertBefore(badge, img?.nextSibling || null);
         }
     });
+
+    // 寻找所有种子下载按钮
+    const torrentButtons = document.querySelectorAll('a.btn-success[href*="downloadtorrentfile.com/hash/"]');
+
+    torrentButtons.forEach(button => {
+        // 从URL中提取哈希值
+        const url = new URL(button.href);
+        const pathParts = url.pathname.split('/');
+        const hash = pathParts[pathParts.length - 1].split('?')[0];
+
+        if (hash && hash.length === 40) {
+            // 修改按钮为直接下载种子文件
+            button.setAttribute('title', '直接下载种子文件');
+            button.removeAttribute('target'); // 移除新标签页打开
+
+            // 添加新标签，表明这是直接下载
+            const badge = document.createElement('span');
+            badge.textContent = '直接';
+            badge.style.cssText = `
+                background-color: #28a745;
+                color: white;
+                padding: 2px 5px;
+                border-radius: 3px;
+                font-size: 10px;
+                margin-left: 5px;
+                vertical-align: middle;
+            `;
+
+            // 在按钮图片后面插入标记
+            const img = button.querySelector('img');
+            button.insertBefore(badge, img?.nextSibling || null);
+
+            // 添加点击事件监听器
+            button.addEventListener('click', function (e) {
+                e.preventDefault(); // 阻止默认导航行为
+
+                // 保存原始按钮状态
+                const originalText = button.innerHTML;
+                const originalWidth = button.offsetWidth;
+                button.style.width = `${originalWidth}px`; // 保持按钮宽度不变
+                button.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 下载中...';
+                button.disabled = true;
+
+                // 尝试从多个源下载种子文件
+                downloadTorrentFile(hash, [
+                    `https://itorrents.org/torrent/${hash.toUpperCase()}.torrent`,
+                    `https://btcache.me/torrent/${hash}`,
+                    `https://thetorrent.org/${hash}.torrent`
+                ], 0, button, originalText);
+            });
+        }
+    });
+
+    // 通过多个来源尝试下载种子文件的函数
+    function downloadTorrentFile(hash, urls, index, button, originalText) {
+        if (index >= urls.length) {
+            // 所有来源都尝试过了，恢复按钮状态并显示错误
+            button.innerHTML = originalText;
+            button.disabled = false;
+            button.style.width = '';
+
+            // 显示错误消息
+            showToast('无法下载种子文件，请尝试使用磁力链接', 'danger');
+            return;
+        }
+
+        // 当前尝试的URL
+        const url = urls[index];
+
+        try {
+            // 使用GM_xmlhttpRequest获取种子文件
+            GM_xmlhttpRequest({
+                method: "GET",
+                url: url,
+                responseType: "blob",
+                timeout: 10000, // 10秒超时
+                onload: function (response) {
+                    if (response.status === 200) {
+                        // 检查响应是否是torrent文件（简单检查）
+                        const contentType = response.responseHeaders.match(/content-type:\s*(.*?)(\s|;|$)/i);
+                        const isTorrent = contentType && (
+                            contentType[1].includes('application/x-bittorrent') ||
+                            contentType[1].includes('application/octet-stream')
+                        );
+
+                        // 还可以检查文件大小，极小的文件可能是错误页面
+                        const hasContent = response.response && response.response.size > 50; // 至少50字节
+
+                        if (isTorrent && hasContent) {
+                            // 创建Blob并下载
+                            const blob = new Blob([response.response], {
+                                type: 'application/x-bittorrent'
+                            });
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = `${hash.toLowerCase()}.torrent`;
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                            URL.revokeObjectURL(url);
+
+                            // 恢复按钮状态
+                            button.innerHTML = originalText;
+                            button.disabled = false;
+                            button.style.width = '';
+
+                            // 显示成功消息
+                            showToast('种子文件下载成功！', 'success');
+                        } else {
+                            // 不是有效的torrent文件，尝试下一个URL
+                            downloadTorrentFile(hash, urls, index + 1, button, originalText);
+                        }
+                    } else {
+                        // HTTP错误，尝试下一个URL
+                        downloadTorrentFile(hash, urls, index + 1, button, originalText);
+                    }
+                },
+                onerror: function () {
+                    // 请求错误，尝试下一个URL
+                    console.error(`从 ${url} 下载种子时出错`);
+                    downloadTorrentFile(hash, urls, index + 1, button, originalText);
+                },
+                ontimeout: function () {
+                    // 请求超时，尝试下一个URL
+                    console.error(`从 ${url} 下载种子超时`);
+                    downloadTorrentFile(hash, urls, index + 1, button, originalText);
+                }
+            });
+        } catch (error) {
+            // 发生异常，尝试下一个URL
+            console.error('下载种子文件时出错:', error);
+            downloadTorrentFile(hash, urls, index + 1, button, originalText);
+        }
+    }
+
+    // 显示通知消息
+    function showToast(message, type = 'success') {
+        // 创建通知元素
+        const toast = document.createElement('div');
+        toast.className = `toast-notification toast-${type}`;
+        // 添加特殊标识符，避免被广告拦截功能删除
+        toast.setAttribute('data-bt4g-notification', 'true');
+        toast.textContent = message;
+        toast.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 12px 20px;
+            background-color: ${type === 'success' ? '#28a745' : '#dc3545'};
+            color: white;
+            border-radius: 4px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            z-index: 9999;
+            font-size: 14px;
+            transition: opacity 0.3s ease-in-out;
+            opacity: 0;
+          `;
+
+        // 添加到页面
+        document.body.appendChild(toast);
+
+        // 显示通知
+        setTimeout(() => {
+            toast.style.opacity = '1';
+        }, 10);
+
+        // 3秒后隐藏
+        setTimeout(() => {
+            toast.style.opacity = '0';
+            setTimeout(() => {
+                // 确保元素仍然存在再移除
+                if (document.body.contains(toast)) {
+                    document.body.removeChild(toast);
+                }
+            }, 300);
+        }, 3000);
+    }
 })();
 
 (function () {
@@ -96,7 +277,7 @@
                 'VP9': ['VP9']
             },
             mediaType: {
-                'BD': ['BD', 'BLURAY', 'BDMV', 'BDREMUX', 'REMUX'],
+                'BD': ['BD', 'BLURAY', "Blu-ray", 'BDMV', 'BDREMUX', 'REMUX'],
                 'WEB-DL': ['WEBDL'],
                 'WEB': ['WEB', 'WEBRIP', 'WEBRip'],
                 'HDTV': ['HDTV', 'TV'],
@@ -715,7 +896,9 @@
         'div.modal.fade.show',
         'div.modal-backdrop',
         'div[style*="pointer-events"]',
-        'iframe[src*="ad"]'
+        'iframe[src*="ad"]',
+        // 处理任何位置的可疑iframe
+        'iframe:not([src*="bt4g"])'
     ];
 
     // 检测和删除叠加层
@@ -727,15 +910,37 @@
 
         // 删除匹配的叠加层
         overlaySelectors.forEach(selector => {
+            // 在整个document范围内查找，不仅是body内
             const elements = document.querySelectorAll(selector);
             elements.forEach(el => {
                 // 确保不删除页面上需要的元素
-                if (el && isOverlay(el) && !isEssentialElement(el)) {
+                if (el && isOverlay(el) && !isEssentialElement(el) && !isScriptNotification(el)) {
                     console.log('移除广告叠加层:', el);
                     el.remove();
                 }
             });
         });
+
+        // 专门处理与body同级的所有元素（不仅是iframe）
+        removeBodySiblings();
+    }
+
+    // 专门处理与body同级的元素
+    function removeBodySiblings() {
+        // 获取documentElement的所有子元素
+        const htmlChildren = Array.from(document.documentElement.children);
+
+        // 遍历所有子元素
+        for (const element of htmlChildren) {
+            // 保留head和body，删除其他非法添加的元素
+            if (element !== document.body && element !== document.head) {
+                // 检查是否是我们自己的元素，如果不是则移除
+                if (!isScriptNotification(element)) {
+                    console.log('移除与body同级的非法元素:', element);
+                    element.remove();
+                }
+            }
+        }
     }
 
     // 判断元素是否为叠加层
@@ -745,10 +950,22 @@
         const zIndex = parseInt(style.getPropertyValue('z-index'), 10);
         const opacity = parseFloat(style.getPropertyValue('opacity'));
 
+        // iframe直接当作叠加层处理
+        if (element.tagName === 'IFRAME') {
+            return true;
+        }
+
         // 叠加层特征：固定/绝对定位 + 高z-index + 可见
         return (position === 'fixed' || position === 'absolute') &&
             ((zIndex > 100) ||
                 (style.getPropertyValue('display') !== 'none' && opacity > 0));
+    }
+
+    // 判断是否为我们自己的通知元素
+    function isScriptNotification(element) {
+        // 检查是否是我们的通知元素
+        return element.hasAttribute('data-bt4g-notification') ||
+            element.classList.contains('toast-notification');
     }
 
     // 判断是否为页面必要元素
@@ -766,7 +983,10 @@
         const hasMagnetButton = element.querySelector('a[href^="magnet:"]') ||
             element.querySelector('.btn-primary');
 
-        return isNavbar || isSearchForm || hasMagnetButton;
+        // 检查是否是我们的通知元素
+        const isNotification = isScriptNotification(element);
+
+        return isNavbar || isSearchForm || hasMagnetButton || isNotification;
     }
 
     // 阻止全局事件捕获可能导致弹窗的行为
@@ -818,6 +1038,11 @@
             const onmousedown = el.getAttribute('onmousedown') || '';
             const onmouseup = el.getAttribute('onmouseup') || '';
 
+            // 排除我们自己的通知元素
+            if (isScriptNotification(el)) {
+                return;
+            }
+
             if (onclick.includes('window.open') ||
                 onclick.includes('popup') ||
                 onmousedown.includes('window.open') ||
@@ -840,22 +1065,35 @@
         preventPopupEvents();
         cleanupInlineEvents();
 
-        // 创建MutationObserver监视DOM变化
-        const observer = new MutationObserver(() => {
+        // 创建MutationObserver监视DOM变化，包括html元素子节点的变化
+        const observer = new MutationObserver((mutations) => {
+            // 检查是否有新增的html子节点
+            const hasHtmlChildChanges = mutations.some(mutation =>
+                mutation.target === document.documentElement && mutation.type === 'childList');
+
+            // 如果有html子节点变化，特别处理同级元素
+            if (hasHtmlChildChanges) {
+                removeBodySiblings();
+            }
+
+            // 常规清理
             removeOverlays();
             cleanupInlineEvents();
         });
 
-        // 开始观察文档体的变化
-        observer.observe(document.body, {
-            childList: true,
-            subtree: true,
-            attributes: true,
+        // 观察文档和html节点的变化，确保能捕获到body外的元素
+        observer.observe(document.documentElement, {
+            childList: true,  // 监听子元素添加删除
+            subtree: true,    // 监听整个子树
+            attributes: true, // 监听属性变化
             attributeFilter: ['style', 'class']
         });
 
         // 定期检查，确保不遗漏动态添加的元素
-        setInterval(removeOverlays, 1000);
+        setInterval(() => {
+            removeOverlays();
+            removeBodySiblings(); // 特别检查body同级元素
+        }, 1000);
 
         // 添加鼠标移动监听，某些广告会在鼠标移动时触发
         document.addEventListener('mousemove', () => {
@@ -871,5 +1109,4 @@
 
     // 页面完全加载后启动完整的广告拦截器
     window.addEventListener('load', initAdBlocker);
-
 })();
