@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name            BT4G Magnet AutoGen
 // @namespace       https://ahogek.com
-// @version         1.3.4
+// @version         1.3.5
 // @description     自动转换BT4G哈希到磁力链接 | 添加高级搜索选项：分辨率、HDR、编码、杜比音频和模糊搜索 | 删除资源恢复 | 广告拦截（未精准测试）
 // @author          AhogeK
 // @match           *://*.bt4g.org/*
@@ -277,7 +277,7 @@
                 'VP9': ['VP9']
             },
             mediaType: {
-                'BD': ['BD', 'BLURAY', "Blu-ray", 'BDMV', 'BDREMUX', 'REMUX'],
+                'BD': ['BD', 'BLURAY', "BLU", "RAY", 'BDMV', 'BDREMUX', 'REMUX'],
                 'WEB-DL': ['WEBDL'],
                 'WEB': ['WEB', 'WEBRIP', 'WEBRip'],
                 'HDTV': ['HDTV', 'TV'],
@@ -881,6 +881,34 @@
 (function () {
     'use strict';
 
+    // 允许的域名列表
+    const ALLOWED_DOMAINS = [
+        location.hostname,  // 当前网站
+        'bt4g', // BT4G相关域名
+        'downloadtorrentfile.com',
+        'filepax.com'
+    ];
+
+    // 检查URL是否是允许的
+    function isAllowedUrl(url) {
+        if (!url) return false;
+
+        // 允许磁力链接
+        if (url.startsWith('magnet:')) return true;
+
+        // 允许网站内部链接
+        if (url.startsWith('/') || url.startsWith('#')) return true;
+
+        try {
+            const urlObj = new URL(url, location.origin);
+            // 检查是否是允许的域名
+            return ALLOWED_DOMAINS.some(domain => urlObj.hostname.includes(domain));
+        } catch (e) {
+            // URL解析失败，默认允许相对路径
+            return !url.includes('://');
+        }
+    }
+
     // BT4G网站上可能的广告叠加层选择器
     const overlaySelectors = [
         // 常见广告层选择器
@@ -929,7 +957,6 @@
     function removeBodySiblings() {
         // 获取documentElement的所有子元素
         const htmlChildren = Array.from(document.documentElement.children);
-
         // 遍历所有子元素
         for (const element of htmlChildren) {
             // 保留head和body，删除其他非法添加的元素
@@ -989,14 +1016,13 @@
         return isNavbar || isSearchForm || hasMagnetButton || isNotification;
     }
 
-    // 阻止全局事件捕获可能导致弹窗的行为
-    function preventPopupEvents() {
-        // 重定义window.open，阻止弹窗广告
+    // 增强型拦截所有可能导致页面跳转的方法
+    function preventRedirects() {
+        // 1. 覆盖 window.open
         if (!window.originalOpen) {
             window.originalOpen = window.open;
             window.open = function (url, name, params) {
-                // 检查是否是网站内部链接或磁力链接
-                if (url && (url.startsWith(location.origin) || url.startsWith('/') || url.startsWith('magnet:'))) {
+                if (isAllowedUrl(url)) {
                     return window.originalOpen(url, name, params);
                 } else {
                     console.log('拦截弹窗:', url);
@@ -1004,6 +1030,88 @@
                 }
             };
         }
+
+        // 2. 覆盖 location.href (使用描述符)
+        try {
+            const originalLocationHrefDescriptor = Object.getOwnPropertyDescriptor(window.Location.prototype, 'href') ||
+                Object.getOwnPropertyDescriptor(location, 'href');
+
+            if (originalLocationHrefDescriptor?.configurable) {
+                Object.defineProperty(window.location, 'href', {
+                    set: function (url) {
+                        if (isAllowedUrl(url)) {
+                            originalLocationHrefDescriptor.set.call(this, url);
+                        } else {
+                            console.log('拦截location.href跳转:', url);
+                            window.showAdBlockerNotification?.(); // 这里也可以使用可选链
+                        }
+                    },
+                    get: originalLocationHrefDescriptor.get,
+                    configurable: true
+                });
+            }
+        } catch (e) {
+            console.log('无法覆盖location.href:', e);
+        }
+
+        // 3. 覆盖 location.assign
+        if (!window.location.originalAssign) {
+            window.location.originalAssign = window.location.assign;
+            window.location.assign = function (url) {
+                if (isAllowedUrl(url)) {
+                    return window.location.originalAssign(url);
+                } else {
+                    console.log('拦截location.assign跳转:', url);
+                    window.showAdBlockerNotification?.();
+                    return null;
+                }
+            };
+        }
+
+        // 4. 覆盖 location.replace
+        if (!window.location.originalReplace) {
+            window.location.originalReplace = window.location.replace;
+            window.location.replace = function (url) {
+                if (isAllowedUrl(url)) {
+                    return window.location.originalReplace(url);
+                } else {
+                    console.log('拦截location.replace跳转:', url);
+                    window.showAdBlockerNotification?.();
+                    return null;
+                }
+            };
+        }
+    }
+
+    // 拦截链接点击事件
+    function interceptLinkClicks() {
+        document.addEventListener('click', function (e) {
+            // 检查是否点击的是链接
+            const linkElement = e.target.closest('a');
+            if (!linkElement) return;
+
+            // 获取链接目标
+            const href = linkElement.getAttribute('href');
+            if (!href) return;
+
+            // 检查是否是允许的URL
+            if (!isAllowedUrl(href)) {
+                console.log('拦截链接跳转:', href);
+                e.preventDefault();
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+                return false;
+            }
+        }, true); // 使用捕获阶段
+    }
+
+    // 阻止全局事件捕获可能导致弹窗的行为
+    function preventPopupEvents() {
+        // 调用增强的重定向拦截
+        preventRedirects();
+
+        // 处理链接点击
+        interceptLinkClicks();
 
         // 阻止页面级别的点击劫持
         document.addEventListener('click', function (e) {
@@ -1032,33 +1140,45 @@
     // 清理可能的内联事件处理程序
     function cleanupInlineEvents() {
         // 查找并清理可疑的内联事件
-        const suspiciousElements = document.querySelectorAll('[onclick], [onmousedown], [onmouseup]');
+        const suspiciousElements = document.querySelectorAll('[onclick], [onmousedown], [onmouseup], [onmousemove], [onload], [onunload]');
         suspiciousElements.forEach(el => {
-            const onclick = el.getAttribute('onclick') || '';
-            const onmousedown = el.getAttribute('onmousedown') || '';
-            const onmouseup = el.getAttribute('onmouseup') || '';
+            // 检查所有内联事件属性
+            const eventAttributes = ['onclick', 'onmousedown', 'onmouseup', 'onmousemove', 'onload', 'onunload'];
 
             // 排除我们自己的通知元素
             if (isScriptNotification(el)) {
                 return;
             }
 
-            if (onclick.includes('window.open') ||
-                onclick.includes('popup') ||
-                onmousedown.includes('window.open') ||
-                onmouseup.includes('window.open')) {
+            // 检查链接元素的目标
+            if (el.tagName === 'A') {
+                const href = el.getAttribute('href');
+                if (href && !isAllowedUrl(href)) {
+                    console.log('修改可疑链接:', href);
+                    el.setAttribute('data-original-href', href);
+                    el.removeAttribute('href');
+                }
+            }
 
-                console.log('移除可疑内联事件:', onclick || onmousedown || onmouseup);
-                el.removeAttribute('onclick');
-                el.removeAttribute('onmousedown');
-                el.removeAttribute('onmouseup');
+            // 清除可疑的事件处理器
+            for (const attr of eventAttributes) {
+                const eventHandler = el.getAttribute(attr);
+                if (eventHandler && (
+                    eventHandler.includes('window.open') ||
+                    eventHandler.includes('popup') ||
+                    eventHandler.includes('location') ||
+                    eventHandler.includes('href')
+                )) {
+                    console.log(`移除可疑内联事件 ${attr}:`, eventHandler);
+                    el.removeAttribute(attr);
+                }
             }
         });
     }
 
     // 主函数：初始化广告拦截器
     function initAdBlocker() {
-        console.log('BT4G 广告拦截器已激活');
+        console.log('BT4G 增强广告拦截器已激活');
 
         // 立即执行一次清理
         removeOverlays();
@@ -1083,8 +1203,8 @@
 
         // 观察文档和html节点的变化，确保能捕获到body外的元素
         observer.observe(document.documentElement, {
-            childList: true,  // 监听子元素添加删除
-            subtree: true,    // 监听整个子树
+            childList: true, // 监听子元素添加删除
+            subtree: true, // 监听整个子树
             attributes: true, // 监听属性变化
             attributeFilter: ['style', 'class']
         });
@@ -1093,6 +1213,7 @@
         setInterval(() => {
             removeOverlays();
             removeBodySiblings(); // 特别检查body同级元素
+            preventRedirects(); // 定期更新重定向防护
         }, 1000);
 
         // 添加鼠标移动监听，某些广告会在鼠标移动时触发
@@ -1101,11 +1222,59 @@
         }, {passive: true});
     }
 
+    // 创建防跳转层，阻止浏览器离开当前页面
+    function createBlockingLayer() {
+        const style = document.createElement('style');
+        style.innerHTML = `
+            .ad-blocker-notification {
+                position: fixed;
+                bottom: 20px;
+                right: 20px;
+                background-color: #f8d7da;
+                color: #721c24;
+                border: 1px solid #f5c6cb;
+                border-radius: 4px;
+                padding: 10px 15px;
+                box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+                z-index: 999999;
+                font-family: Arial, sans-serif;
+                max-width: 300px;
+                animation: fade-in 0.3s ease-in-out;
+                pointer-events: auto;
+                display: none;
+            }
+            @keyframes fade-in {
+                from { opacity: 0; }
+                to { opacity: 1; }
+            }
+        `;
+        document.head.appendChild(style);
+
+        const notification = document.createElement('div');
+        notification.className = 'ad-blocker-notification';
+        notification.setAttribute('data-bt4g-notification', 'true');
+        notification.textContent = '已阻止可疑广告跳转';
+        document.body.appendChild(notification);
+
+        // 显示通知的方法
+        window.showAdBlockerNotification = function () {
+            notification.style.display = 'block';
+            setTimeout(() => {
+                notification.style.display = 'none';
+            }, 3000);
+        };
+    }
+
     // 在DOMContentLoaded时开始初始拦截
     document.addEventListener('DOMContentLoaded', () => {
         removeOverlays();
         preventPopupEvents();
+        createBlockingLayer();
     });
+
+    // 提前开始拦截重定向
+    preventRedirects();
+    interceptLinkClicks();
 
     // 页面完全加载后启动完整的广告拦截器
     window.addEventListener('load', initAdBlocker);
