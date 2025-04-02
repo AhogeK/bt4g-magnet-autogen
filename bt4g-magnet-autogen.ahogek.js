@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name            BT4G Magnet AutoGen
 // @namespace       https://ahogek.com
-// @version         1.3.5
+// @version         1.3.6
 // @description     自动转换BT4G哈希到磁力链接 | 添加高级搜索选项：分辨率、HDR、编码、杜比音频和模糊搜索 | 删除资源恢复 | 广告拦截（未精准测试）
 // @author          AhogeK
 // @match           *://*.bt4g.org/*
@@ -883,7 +883,7 @@
 
     // 允许的域名列表
     const ALLOWED_DOMAINS = [
-        location.hostname,  // 当前网站
+        location.hostname, // 当前网站
         'bt4g', // BT4G相关域名
         'downloadtorrentfile.com',
         'filepax.com'
@@ -892,13 +892,10 @@
     // 检查URL是否是允许的
     function isAllowedUrl(url) {
         if (!url) return false;
-
         // 允许磁力链接
         if (url.startsWith('magnet:')) return true;
-
         // 允许网站内部链接
         if (url.startsWith('/') || url.startsWith('#')) return true;
-
         try {
             const urlObj = new URL(url, location.origin);
             // 检查是否是允许的域名
@@ -909,7 +906,7 @@
         }
     }
 
-    // BT4G网站上可能的广告叠加层选择器
+    // 增强版叠加层选择器
     const overlaySelectors = [
         // 常见广告层选择器
         'div[style*="position: fixed"]',
@@ -926,30 +923,48 @@
         'div[style*="pointer-events"]',
         'iframe[src*="ad"]',
         // 处理任何位置的可疑iframe
-        'iframe:not([src*="bt4g"])'
+        'iframe:not([src*="bt4g"])',
+
+        // 新增选择器 - 针对隐形覆盖层
+        'div[style*="opacity: 0"]',
+        'div[style*="opacity:0"]',
+        'div[style*="height: 100%"][style*="width: 100%"]',
+        'div[style*="top: 0"][style*="left: 0"][style*="right: 0"][style*="bottom: 0"]',
+        'div[style*="cursor: pointer"]',
+        'div[style*="position: absolute"][style*="width: 100%"]',
+        'a[target="_blank"]:not([href^="magnet:"])',
+        'a[rel*="nofollow"]',
+        'a[rel*="sponsored"]',
+
+        // 新增 - 特殊隐藏iframe
+        'iframe[style*="opacity: 0"]',
+        'iframe[width="1"][height="1"]',
+        'iframe[style*="visibility: hidden"]'
     ];
 
     // 检测和删除叠加层
     function removeOverlays() {
         // 恢复被禁用的滚动
-        if (document.body.style.overflow === 'hidden') {
+        if (document.body && document.body.style.overflow === 'hidden') {
             document.body.style.overflow = '';
         }
 
         // 删除匹配的叠加层
         overlaySelectors.forEach(selector => {
-            // 在整个document范围内查找，不仅是body内
-            const elements = document.querySelectorAll(selector);
-            elements.forEach(el => {
-                // 确保不删除页面上需要的元素
-                if (el && isOverlay(el) && !isEssentialElement(el) && !isScriptNotification(el)) {
-                    console.log('移除广告叠加层:', el);
-                    el.remove();
-                }
-            });
+            try {
+                const elements = document.querySelectorAll(selector);
+                elements.forEach(el => {
+                    if (el && isOverlay(el) && !isEssentialElement(el) && !isScriptNotification(el)) {
+                        console.log('移除广告叠加层:', el);
+                        el.remove();
+                    }
+                });
+            } catch (error) {
+                console.error('选择器处理错误:', selector, error);
+            }
         });
 
-        // 专门处理与body同级的所有元素（不仅是iframe）
+        // 处理与body同级的元素
         removeBodySiblings();
     }
 
@@ -970,29 +985,50 @@
         }
     }
 
-    // 判断元素是否为叠加层
+    // 判断元素是否为我们自己的通知元素
+    function isScriptNotification(element) {
+        // 检查是否是我们的通知元素
+        return element.hasAttribute('data-bt4g-notification') ||
+            element.classList.contains('toast-notification');
+    }
+
+    // 判断元素是否为叠加层（增强版）
     function isOverlay(element) {
         const style = window.getComputedStyle(element);
         const position = style.getPropertyValue('position');
         const zIndex = parseInt(style.getPropertyValue('z-index'), 10);
         const opacity = parseFloat(style.getPropertyValue('opacity'));
 
-        // iframe直接当作叠加层处理
+        // iframe特殊处理
         if (element.tagName === 'IFRAME') {
-            return true;
+            const src = element.getAttribute('src') || '';
+            // 更严格的iframe检查
+            return !src.includes(location.hostname) && !src.includes('bt4g');
         }
 
-        // 叠加层特征：固定/绝对定位 + 高z-index + 可见
-        return (position === 'fixed' || position === 'absolute') &&
-            ((zIndex > 100) ||
-                (style.getPropertyValue('display') !== 'none' && opacity > 0));
-    }
+        // 增强检测
+        // 1. 检测隐形覆盖层
+        const isFullPageOverlay =
+            element.offsetWidth > window.innerWidth * 0.8 &&
+            element.offsetHeight > window.innerHeight * 0.8;
 
-    // 判断是否为我们自己的通知元素
-    function isScriptNotification(element) {
-        // 检查是否是我们的通知元素
-        return element.hasAttribute('data-bt4g-notification') ||
-            element.classList.contains('toast-notification');
+        // 2. 检测可疑的空链接包装器
+        const hasMultipleChildAnchors = element.querySelectorAll('a').length > 3;
+
+        // 3. 检测隐藏但可点击的元素
+        const isHiddenButClickable =
+            (opacity === 0 || style.getPropertyValue('visibility') === 'hidden') &&
+            style.getPropertyValue('pointer-events') !== 'none';
+
+        return (
+            // 原有条件
+            ((position === 'fixed' || position === 'absolute') &&
+                ((zIndex > 100) || (style.getPropertyValue('display') !== 'none' && opacity > 0))) ||
+            // 新增条件
+            isFullPageOverlay ||
+            hasMultipleChildAnchors ||
+            isHiddenButClickable
+        );
     }
 
     // 判断是否为页面必要元素
@@ -1026,10 +1062,24 @@
                     return window.originalOpen(url, name, params);
                 } else {
                     console.log('拦截弹窗:', url);
-                    return null;
+                    window.showAdBlockerNotification?.();
+                    return {
+                        // 模拟窗口对象，防止脚本错误
+                        closed: true,
+                        close: function () {
+                        },
+                        focus: function () {
+                        },
+                        blur: function () {
+                        }
+                    };
                 }
             };
         }
+
+        // window.open的其他别名
+        window.openWindow = window.open;
+        window.openTab = window.open;
 
         // 2. 覆盖 location.href (使用描述符)
         try {
@@ -1043,7 +1093,7 @@
                             originalLocationHrefDescriptor.set.call(this, url);
                         } else {
                             console.log('拦截location.href跳转:', url);
-                            window.showAdBlockerNotification?.(); // 这里也可以使用可选链
+                            window.showAdBlockerNotification?.();
                         }
                     },
                     get: originalLocationHrefDescriptor.get,
@@ -1081,28 +1131,176 @@
                 }
             };
         }
+
+        // 5. 增强 - 拦截 window 上下文
+        try {
+            // 防止iframe修改顶层窗口
+            if (window !== window.top) {
+                Object.defineProperty(window, 'top', {
+                    get: function () {
+                        return window;
+                    }
+                });
+                Object.defineProperty(window, 'parent', {
+                    get: function () {
+                        return window;
+                    }
+                });
+            }
+        } catch (e) {
+            console.log('无法覆盖window上下文属性:', e);
+        }
+
+        // 6. 拦截 window.postMessage
+        const originalPostMessage = window.postMessage;
+        window.postMessage = function (message, targetOrigin, transfer) {
+            if (typeof message === 'object' && message) {
+                // 检查消息是否包含可疑URL
+                const messageString = JSON.stringify(message).toLowerCase();
+                if (messageString.includes('http') || messageString.includes('url')) {
+                    console.log('拦截可疑postMessage:', messageString.substring(0, 100));
+                    return;
+                }
+            }
+            return originalPostMessage.apply(this, arguments);
+        };
+
+        // 7. 防止页面卸载重定向
+        window.addEventListener('beforeunload', function (event) {
+            // 记录当前URL
+            const currentURL = window.location.href;
+
+            // 使用可选链和更简洁的条件检查
+            const clickedElement = document.activeElement;
+            const targetHref = clickedElement?.tagName === 'A' ?
+                clickedElement.getAttribute('href') : null;
+
+            if (targetHref && !isAllowedUrl(targetHref)) {
+                console.log('拦截beforeunload触发的导航:', targetHref);
+
+                // 标准方法：阻止默认行为
+                event.preventDefault();
+
+                window.showAdBlockerNotification?.();
+                return '';
+            }
+
+            // 检查是否有正在进行的重定向
+            // 注意：此setTimeout在beforeunload后可能不会执行，因为页面可能已开始卸载
+            setTimeout(() => {
+                // 如果导航被触发且不是允许的URL，则尝试阻止
+                if (window.location.href !== currentURL && !isAllowedUrl(window.location.href)) {
+                    console.log('拦截页面卸载时的重定向:', window.location.href);
+                    window.stop(); // 停止页面加载
+                    history.pushState(null, '', currentURL); // 恢复URL
+                    window.showAdBlockerNotification?.();
+                }
+            }, 0);
+        }, true);
     }
 
-    // 拦截链接点击事件
+    // 增强版点击拦截 - 主要针对新标签页劫持
     function interceptLinkClicks() {
+        // 使用捕获阶段拦截所有点击
         document.addEventListener('click', function (e) {
-            // 检查是否点击的是链接
-            const linkElement = e.target.closest('a');
-            if (!linkElement) return;
+            // 1. 检查是否点击了链接
+            let targetElement = e.target;
+            let isBlocked = false;
 
-            // 获取链接目标
-            const href = linkElement.getAttribute('href');
-            if (!href) return;
+            // 2. 检查点击目标及其所有父元素
+            while (targetElement && targetElement !== document) {
+                // 检查是否是链接
+                if (targetElement.tagName === 'A') {
+                    const href = targetElement.getAttribute('href');
+                    if (href && !isAllowedUrl(href)) {
+                        console.log('拦截链接跳转:', href);
+                        e.preventDefault();
+                        e.stopPropagation();
+                        isBlocked = true;
+                        window.showAdBlockerNotification?.();
+                        break;
+                    }
+                }
 
-            // 检查是否是允许的URL
-            if (!isAllowedUrl(href)) {
-                console.log('拦截链接跳转:', href);
-                e.preventDefault();
-                e.stopPropagation();
-                e.stopImmediatePropagation();
-                return false;
+                // 检查onclick和其他事件
+                const suspiciousEventAttrs = ['onclick', 'onmousedown', 'onmouseup'];
+
+                // 使用some()方法，可以在返回true时提前退出循环
+                suspiciousEventAttrs.some(attr => {
+                    const handler = targetElement.getAttribute(attr);
+                    if (handler && (
+                        handler.includes('window.open') ||
+                        handler.includes('location') ||
+                        handler.includes('http')
+                    )) {
+                        console.log(`拦截可疑${attr}事件:`, handler);
+                        e.preventDefault();
+                        e.stopPropagation();
+                        isBlocked = true;
+                        targetElement.removeAttribute(attr); // 立即移除事件
+                        window.showAdBlockerNotification?.();
+                        return true; // 相当于break
+                    }
+                    return false;
+                });
+
+                // 检查data属性中的URL - 如果尚未被阻止
+                if (!isBlocked) {
+                    // 直接使用some方法，不存储返回值
+                    Array.from(targetElement.attributes).some(attr => {
+                        if (attr.name.startsWith('data-') &&
+                            typeof attr.value === 'string' &&
+                            (attr.value.includes('http') || attr.value.includes('www.'))) {
+
+                            if (!isAllowedUrl(attr.value)) {
+                                console.log('拦截data属性中的URL:', attr.value);
+                                e.preventDefault();
+                                e.stopPropagation();
+                                isBlocked = true;
+                                return true; // 提前退出循环
+                            }
+                        }
+                        return false;
+                    });
+                }
+
+                if (isBlocked) break;
+                targetElement = targetElement.parentElement;
             }
-        }, true); // 使用捕获阶段
+
+            // 3. 点击后延迟检查是否有尝试打开新窗口
+            if (!isBlocked) {
+                setTimeout(() => {
+                    // 检查是否有新的异常iframe
+                    const newIframes = document.querySelectorAll('iframe:not([data-checked])');
+                    newIframes.forEach(iframe => {
+                        iframe.setAttribute('data-checked', 'true');
+                        const src = iframe.getAttribute('src') || '';
+                        if (src && !isAllowedUrl(src)) {
+                            console.log('移除可疑iframe:', src);
+                            iframe.remove();
+                            window.showAdBlockerNotification?.();
+                        }
+                    });
+                }, 100);
+            }
+        }, true);
+
+        // 拦截mousedown/mouseup事件 (有些广告用这些事件触发)
+        ['mousedown', 'mouseup', 'auxclick', 'contextmenu'].forEach(eventType => {
+            document.addEventListener(eventType, function (e) {
+                const target = e.target.closest('a') || e.target;
+                if (target.tagName === 'A') {
+                    const href = target.getAttribute('href');
+                    if (href && !isAllowedUrl(href)) {
+                        console.log(`拦截${eventType}事件:`, href);
+                        e.preventDefault();
+                        e.stopPropagation();
+                        window.showAdBlockerNotification?.();
+                    }
+                }
+            }, true);
+        });
     }
 
     // 阻止全局事件捕获可能导致弹窗的行为
@@ -1176,77 +1374,106 @@
         });
     }
 
-    // 主函数：初始化广告拦截器
-    function initAdBlocker() {
-        console.log('BT4G 增强广告拦截器已激活');
-
-        // 立即执行一次清理
-        removeOverlays();
-        preventPopupEvents();
-        cleanupInlineEvents();
-
-        // 创建MutationObserver监视DOM变化，包括html元素子节点的变化
-        const observer = new MutationObserver((mutations) => {
-            // 检查是否有新增的html子节点
-            const hasHtmlChildChanges = mutations.some(mutation =>
-                mutation.target === document.documentElement && mutation.type === 'childList');
-
-            // 如果有html子节点变化，特别处理同级元素
-            if (hasHtmlChildChanges) {
-                removeBodySiblings();
+    // 防止通过特殊手段添加的脚本和iframe
+    function preventDynamicElements() {
+        // 1. 覆盖document.write和document.writeln
+        const originalWrite = document.write;
+        document.write = function (...args) {
+            const content = args.join('');
+            // 检查内容是否包含可疑代码
+            if (content.includes('<iframe') || content.includes('window.open') ||
+                content.includes('onclick') || content.includes('http')) {
+                console.log('拦截可疑document.write:', content.substring(0, 100));
+                return;
             }
+            return originalWrite.apply(this, args);
+        };
+        document.writeln = document.write;
 
-            // 常规清理
-            removeOverlays();
-            cleanupInlineEvents();
-        });
+        // 2. 监控appendChild和insertBefore方法
+        const originalAppendChild = Element.prototype.appendChild;
+        Element.prototype.appendChild = function (node) {
+            // 检查是否添加敏感元素
+            if (node.nodeName === 'IFRAME' || node.nodeName === 'SCRIPT') {
+                // 检查iframe的src
+                if (node.nodeName === 'IFRAME') {
+                    const src = node.getAttribute('src');
+                    if (src && !isAllowedUrl(src)) {
+                        console.log('拦截添加可疑iframe:', src);
+                        return document.createElement('div'); // 返回空div代替iframe
+                    }
+                }
 
-        // 观察文档和html节点的变化，确保能捕获到body外的元素
-        observer.observe(document.documentElement, {
-            childList: true, // 监听子元素添加删除
-            subtree: true, // 监听整个子树
-            attributes: true, // 监听属性变化
-            attributeFilter: ['style', 'class']
-        });
+                // 检查script的内容
+                if (node.nodeName === 'SCRIPT') {
+                    const content = node.textContent || node.innerText || '';
+                    const src = node.getAttribute('src') || '';
 
-        // 定期检查，确保不遗漏动态添加的元素
-        setInterval(() => {
-            removeOverlays();
-            removeBodySiblings(); // 特别检查body同级元素
-            preventRedirects(); // 定期更新重定向防护
-        }, 1000);
+                    if ((content && (content.includes('window.open') || content.includes('popup'))) ||
+                        (src && !isAllowedUrl(src))) {
+                        console.log('拦截可疑script:', src || content.substring(0, 100));
+                        return document.createElement('script'); // 返回空脚本
+                    }
+                }
+            }
+            return originalAppendChild.call(this, node);
+        };
 
-        // 添加鼠标移动监听，某些广告会在鼠标移动时触发
-        document.addEventListener('mousemove', () => {
-            setTimeout(removeOverlays, 100);
-        }, {passive: true});
+        // 同样处理insertBefore方法
+        const originalInsertBefore = Element.prototype.insertBefore;
+        Element.prototype.insertBefore = function (node, referenceNode) {
+            // 与appendChild相同的检查逻辑
+            if (node.nodeName === 'IFRAME' || node.nodeName === 'SCRIPT') {
+                // 检查iframe的src
+                if (node.nodeName === 'IFRAME') {
+                    const src = node.getAttribute('src');
+                    if (src && !isAllowedUrl(src)) {
+                        console.log('拦截插入可疑iframe:', src);
+                        return document.createElement('div');
+                    }
+                }
+
+                // 检查script的内容
+                if (node.nodeName === 'SCRIPT') {
+                    const content = node.textContent || node.innerText || '';
+                    const src = node.getAttribute('src') || '';
+
+                    if ((content && (content.includes('window.open') || content.includes('popup'))) ||
+                        (src && !isAllowedUrl(src))) {
+                        console.log('拦截可疑script:', src || content.substring(0, 100));
+                        return document.createElement('script');
+                    }
+                }
+            }
+            return originalInsertBefore.call(this, node, referenceNode);
+        };
     }
 
-    // 创建防跳转层，阻止浏览器离开当前页面
+    // 创建防跳转通知层
     function createBlockingLayer() {
         const style = document.createElement('style');
         style.innerHTML = `
-            .ad-blocker-notification {
-                position: fixed;
-                bottom: 20px;
-                right: 20px;
-                background-color: #f8d7da;
-                color: #721c24;
-                border: 1px solid #f5c6cb;
-                border-radius: 4px;
-                padding: 10px 15px;
-                box-shadow: 0 2px 5px rgba(0,0,0,0.2);
-                z-index: 999999;
-                font-family: Arial, sans-serif;
-                max-width: 300px;
-                animation: fade-in 0.3s ease-in-out;
-                pointer-events: auto;
-                display: none;
-            }
-            @keyframes fade-in {
-                from { opacity: 0; }
-                to { opacity: 1; }
-            }
+        .ad-blocker-notification {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+            border-radius: 4px;
+            padding: 10px 15px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+            z-index: 999999;
+            font-family: Arial, sans-serif;
+            max-width: 300px;
+            animation: fade-in 0.3s ease-in-out;
+            pointer-events: auto;
+            display: none;
+        }
+        @keyframes fade-in {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
         `;
         document.head.appendChild(style);
 
@@ -1265,17 +1492,120 @@
         };
     }
 
-    // 在DOMContentLoaded时开始初始拦截
+    // 主函数：初始化广告拦截器
+    function initAdBlocker() {
+        console.log('BT4G 增强广告拦截器已激活 - 强化新标签页防护');
+
+        // 立即调用所有拦截函数
+        removeOverlays();
+        preventPopupEvents();
+        cleanupInlineEvents();
+        preventDynamicElements();
+
+        // MutationObserver监视DOM变化
+        const observer = new MutationObserver((mutations) => {
+            // 检查是否有新增的html子节点
+            const hasHtmlChildChanges = mutations.some(mutation =>
+                mutation.target === document.documentElement && mutation.type === 'childList');
+
+            if (hasHtmlChildChanges) {
+                removeBodySiblings();
+            }
+
+            // 检查变化的节点
+            for (const mutation of mutations) {
+                // 使用可选链检查和迭代添加的节点
+                mutation.addedNodes?.forEach(node => {
+                    // 检查是否添加了iframe或script
+                    if (node.nodeName === 'IFRAME' || node.nodeName === 'SCRIPT') {
+                        // 针对iframe检查src
+                        if (node.nodeName === 'IFRAME') {
+                            const src = node.getAttribute('src');
+                            if (src && !isAllowedUrl(src)) {
+                                console.log('移除动态添加的可疑iframe:', src);
+                                node.remove();
+                            }
+                        }
+                    }
+                });
+            }
+
+            removeOverlays();
+            cleanupInlineEvents();
+        });
+
+        // 增强监视范围，包括document和html
+        observer.observe(document.documentElement, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+            attributeFilter: ['style', 'class', 'src', 'href']
+        });
+
+        // 更频繁地检查覆盖层和跳转
+        setInterval(() => {
+            removeOverlays();
+            removeBodySiblings();
+            preventRedirects();
+        }, 500); // 降低间隔时间以提高检测频率
+
+        // 鼠标移动和按键检测
+        ['mousemove', 'keydown', 'scroll'].forEach(event => {
+            document.addEventListener(event, () => {
+                setTimeout(removeOverlays, 50);
+            }, {passive: true});
+        });
+
+        // 监视iframe消息
+        window.addEventListener('message', function (event) {
+            // 1. 首先验证消息的来源
+            const trustedOrigins = [
+                'https://yourtrusted-domain.com',
+                'https://another-trusted-domain.com',
+                // 添加所有您信任的域名
+            ];
+
+            // 如果消息来源不在信任列表中，则拒绝处理
+            if (!trustedOrigins.includes(event.origin)) {
+                console.log('拦截来自不受信任来源的消息:', event.origin);
+                return; // 不处理来自未知来源的消息
+            }
+
+            // 2. 在验证来源后，再检查消息内容
+            if (event.data && typeof event.data === 'string' &&
+                (event.data.includes('http') || event.data.includes('url')) &&
+                !isAllowedUrl(event.data)) {
+                console.log('拦截postMessage包含的URL:', event.data.substring(0, 100));
+                event.stopPropagation();
+            }
+        }, true);
+    }
+
+    // 在文档准备前预先拦截重定向方法
+    preventRedirects();
+
+    // 在DOM开始构建时就拦截关键行为
+    document.addEventListener('readystatechange', function () {
+        if (document.readyState === 'interactive' || document.readyState === 'complete') {
+            removeOverlays();
+            preventPopupEvents();
+            preventDynamicElements();
+            interceptLinkClicks();
+        }
+    });
+
+    // DOMContentLoaded时启动防护
     document.addEventListener('DOMContentLoaded', () => {
         removeOverlays();
         preventPopupEvents();
         createBlockingLayer();
+        preventDynamicElements();
     });
 
-    // 提前开始拦截重定向
-    preventRedirects();
+    // 立即执行这些关键防护
     interceptLinkClicks();
+    preventDynamicElements();
 
-    // 页面完全加载后启动完整的广告拦截器
+    // 页面加载后启动完整防护
     window.addEventListener('load', initAdBlocker);
 })();
