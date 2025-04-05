@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name            BT4G Magnet AutoGen
 // @namespace       https://ahogek.com
-// @version         1.3.8
+// @version         1.3.9
 // @description     自动转换BT4G哈希到磁力链接 | 添加高级搜索选项：分辨率、HDR、编码、杜比音频和模糊搜索 | 删除资源恢复 | 广告拦截（未精准测试）
 // @author          AhogeK
 // @match           *://*.bt4g.org/*
@@ -1641,22 +1641,31 @@
             }, {passive: true});
         });
 
-        // 监视iframe消息
+        // 监视iframe消息 - 修改后的版本
         window.addEventListener('message', function (event) {
-            // 1. 首先验证消息的来源
-            const trustedOrigins = [
-                'https://yourtrusted-domain.com',
-                'https://another-trusted-domain.com',
-                // 添加所有您信任的域名
-            ];
+            // 使用与ALLOWED_DOMAINS相同的逻辑来验证消息来源
+            let isFromTrustedOrigin = false;
+
+            try {
+                // 解析消息来源的主机名
+                const originHostname = new URL(event.origin).hostname;
+
+                // 检查是否是允许的域名
+                isFromTrustedOrigin = ALLOWED_DOMAINS.some(domain =>
+                    originHostname === domain || originHostname.includes(domain)
+                );
+
+            } catch (e) {
+                console.log('解析消息来源失败:', e);
+            }
 
             // 如果消息来源不在信任列表中，则拒绝处理
-            if (!trustedOrigins.includes(event.origin)) {
+            if (!isFromTrustedOrigin) {
                 console.log('拦截来自不受信任来源的消息:', event.origin);
                 return; // 不处理来自未知来源的消息
             }
 
-            // 2. 在验证来源后，再检查消息内容
+            // 在验证来源后，再检查消息内容
             if (event.data && typeof event.data === 'string' &&
                 (event.data.includes('http') || event.data.includes('url')) &&
                 !isAllowedUrl(event.data)) {
