@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name            BT4G Magnet AutoGen
 // @namespace       https://ahogek.com
-// @version         1.3.7
+// @version         1.3.8
 // @description     自动转换BT4G哈希到磁力链接 | 添加高级搜索选项：分辨率、HDR、编码、杜比音频和模糊搜索 | 删除资源恢复 | 广告拦截（未精准测试）
 // @author          AhogeK
 // @match           *://*.bt4g.org/*
@@ -1052,7 +1052,150 @@
         return isNavbar || isSearchForm || hasMagnetButton || isNotification;
     }
 
-    // 增强型拦截所有可能导致页面跳转的方法
+    function setupNavigationProtection() {
+        // 保存当前URL
+        let currentUrl = window.location.href;
+
+        // 监控URL变化（定期检查） - 修复未使用变量警告
+        setInterval(() => {
+            if (window.location.href !== currentUrl) {
+                const newUrl = window.location.href;
+                if (!isAllowedUrl(newUrl)) {
+                    console.log('检测到不允许的URL变化:', newUrl);
+                    window.showAdBlockerNotification?.();
+                    // 尝试回退到上一个URL
+                    try {
+                        window.history.pushState(null, '', currentUrl);
+                    } catch (e) {
+                        console.log('无法回退到上一个URL:', e);
+                    }
+                } else {
+                    // 更新当前URL
+                    currentUrl = newUrl;
+                }
+            }
+        }, 100);
+
+        // 监听popstate事件（历史导航）
+        window.addEventListener('popstate', function (e) {
+            if (!isAllowedUrl(window.location.href)) {
+                console.log('检测到不允许的历史导航:', window.location.href);
+                window.showAdBlockerNotification?.();
+                // 尝试恢复到之前的URL
+                try {
+                    window.history.pushState(null, '', currentUrl);
+                } catch (e) {
+                    console.log('无法恢复popstate导航:', e);
+                }
+            } else {
+                currentUrl = window.location.href;
+            }
+        });
+
+        // 增强beforeunload事件处理 - 移除废弃的API
+        window.addEventListener('beforeunload', function (e) {
+            // 检查当前活动元素
+            const activeElement = document.activeElement;
+            let shouldBlock = false;
+
+            // 检查链接元素 - 使用可选链接
+            const href = activeElement?.tagName === 'A' ? activeElement?.getAttribute('href') : null;
+            if (href && !isAllowedUrl(href)) {
+                shouldBlock = true;
+                console.log('拦截beforeunload导航:', href);
+            }
+
+            // 检查表单提交 - 使用可选链接
+            const action = activeElement?.form?.getAttribute('action');
+            if (action && !isAllowedUrl(action)) {
+                shouldBlock = true;
+                console.log('拦截表单提交导航:', action);
+            }
+
+            // 使用现代标准方法阻止导航 - 不再使用returnValue
+            if (shouldBlock) {
+                e.preventDefault();
+                window.showAdBlockerNotification?.();
+            }
+        }, true);
+
+        // 监听form提交事件
+        document.addEventListener('submit', function (e) {
+            const form = e.target;
+            const action = form.getAttribute('action') || window.location.href;
+            if (!isAllowedUrl(action)) {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('拦截表单提交:', action);
+                window.showAdBlockerNotification?.();
+            }
+        }, true);
+
+        // 替换有问题的Navigation API监控
+        monitorPageNavigation();
+    }
+
+    // 使用更广泛支持的方法替代Navigation API
+    function monitorPageNavigation() {
+        // 监听所有a标签的点击事件
+        document.addEventListener('click', function (e) {
+            // 查找最近的a标签
+            const linkElement = e.target.closest('a');
+            if (linkElement) {
+                const href = linkElement.getAttribute('href');
+                if (href && !isAllowedUrl(href)) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('拦截链接导航:', href);
+                    window.showAdBlockerNotification?.();
+                }
+            }
+        }, true);
+
+        // 监听hashchange事件
+        window.addEventListener('hashchange', function (e) {
+            const newURL = e.newURL;
+            if (newURL && !isAllowedUrl(newURL)) {
+                e.preventDefault(); // 在某些浏览器中可能不起作用
+                console.log('拦截hash变化导航:', newURL);
+                window.showAdBlockerNotification?.();
+
+                // 尝试恢复到上一个URL
+                try {
+                    window.location.hash = e.oldURL.split('#')[1] || '';
+                } catch (error) {
+                    console.log('无法恢复hash变化:', error);
+                }
+            }
+        });
+
+        // 拦截window.history方法
+        try {
+            const originalPushState = window.history.pushState;
+            window.history.pushState = function (state, title, url) {
+                if (url && !isAllowedUrl(url)) {
+                    console.log('拦截history.pushState导航:', url);
+                    window.showAdBlockerNotification?.();
+                    return;
+                }
+                return originalPushState.apply(this, arguments);
+            };
+
+            const originalReplaceState = window.history.replaceState;
+            window.history.replaceState = function (state, title, url) {
+                if (url && !isAllowedUrl(url)) {
+                    console.log('拦截history.replaceState导航:', url);
+                    window.showAdBlockerNotification?.();
+                    return;
+                }
+                return originalReplaceState.apply(this, arguments);
+            };
+        } catch (e) {
+            console.log('无法拦截history方法:', e);
+        }
+    }
+
+    // 将这个新函数添加到preventRedirects函数中
     function preventRedirects() {
         // 1. 覆盖 window.open
         if (!window.originalOpen) {
@@ -1104,75 +1247,8 @@
             console.log('无法覆盖location.href:', e);
         }
 
-        // 3. 覆盖 location.assign - 修复版本
-        try {
-            // 保存原始函数的引用
-            const originalAssign = window.location.assign;
-            // 创建拦截函数
-            const interceptedAssign = function (url) {
-                if (isAllowedUrl(url)) {
-                    return originalAssign.call(window.location, url);
-                } else {
-                    console.log('拦截location.assign跳转:', url);
-                    window.showAdBlockerNotification?.();
-                    return null;
-                }
-            };
-
-            // 尝试使用Object.defineProperty覆盖
-            Object.defineProperty(window.location, 'assign', {
-                value: interceptedAssign,
-                configurable: true
-            });
-
-            // 创建安全函数作为备选
-            window.safeAssign = function (url) {
-                if (isAllowedUrl(url)) {
-                    originalAssign.call(window.location, url);
-                } else {
-                    console.log('通过safeAssign拦截location.assign跳转:', url);
-                    window.showAdBlockerNotification?.();
-                }
-            };
-        } catch (e) {
-            console.log('无法覆盖location.assign:', e);
-            // 如果覆盖失败，依靠其他防护机制
-        }
-
-        // 4. 覆盖 location.replace - 修复版本
-        try {
-            // 保存原始函数的引用
-            const originalReplace = window.location.replace;
-            // 创建拦截函数
-            const interceptedReplace = function (url) {
-                if (isAllowedUrl(url)) {
-                    return originalReplace.call(window.location, url);
-                } else {
-                    console.log('拦截location.replace跳转:', url);
-                    window.showAdBlockerNotification?.();
-                    return null;
-                }
-            };
-
-            // 尝试使用Object.defineProperty覆盖
-            Object.defineProperty(window.location, 'replace', {
-                value: interceptedReplace,
-                configurable: true
-            });
-
-            // 创建安全函数作为备选
-            window.safeReplace = function (url) {
-                if (isAllowedUrl(url)) {
-                    originalReplace.call(window.location, url);
-                } else {
-                    console.log('通过safeReplace拦截location.replace跳转:', url);
-                    window.showAdBlockerNotification?.();
-                }
-            };
-        } catch (e) {
-            console.log('无法覆盖location.replace:', e);
-            // 如果覆盖失败，依靠其他防护机制
-        }
+        // 3-4. 替换原来的location.assign和replace覆盖，使用我们的新方法
+        setupNavigationProtection();
 
         // 5. 增强 - 拦截 window 上下文
         try {
@@ -1206,39 +1282,6 @@
             }
             return originalPostMessage.apply(this, arguments);
         };
-
-        // 7. 防止页面卸载重定向
-        window.addEventListener('beforeunload', function (event) {
-            // 记录当前URL
-            const currentURL = window.location.href;
-
-            // 使用可选链和更简洁的条件检查
-            const clickedElement = document.activeElement;
-            const targetHref = clickedElement?.tagName === 'A' ?
-                clickedElement.getAttribute('href') : null;
-
-            if (targetHref && !isAllowedUrl(targetHref)) {
-                console.log('拦截beforeunload触发的导航:', targetHref);
-
-                // 标准方法：阻止默认行为
-                event.preventDefault();
-
-                window.showAdBlockerNotification?.();
-                return '';
-            }
-
-            // 检查是否有正在进行的重定向
-            // 注意：此setTimeout在beforeunload后可能不会执行，因为页面可能已开始卸载
-            setTimeout(() => {
-                // 如果导航被触发且不是允许的URL，则尝试阻止
-                if (window.location.href !== currentURL && !isAllowedUrl(window.location.href)) {
-                    console.log('拦截页面卸载时的重定向:', window.location.href);
-                    window.stop(); // 停止页面加载
-                    history.pushState(null, '', currentURL); // 恢复URL
-                    window.showAdBlockerNotification?.();
-                }
-            }, 0);
-        }, true);
     }
 
     // 增强版点击拦截 - 主要针对新标签页劫持
