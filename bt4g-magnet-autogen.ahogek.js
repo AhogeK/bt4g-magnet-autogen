@@ -1104,32 +1104,74 @@
             console.log('无法覆盖location.href:', e);
         }
 
-        // 3. 覆盖 location.assign
-        if (!window.location.originalAssign) {
-            window.location.originalAssign = window.location.assign;
-            window.location.assign = function (url) {
+        // 3. 覆盖 location.assign - 修复版本
+        try {
+            // 保存原始函数的引用
+            const originalAssign = window.location.assign;
+            // 创建拦截函数
+            const interceptedAssign = function (url) {
                 if (isAllowedUrl(url)) {
-                    return window.location.originalAssign(url);
+                    return originalAssign.call(window.location, url);
                 } else {
                     console.log('拦截location.assign跳转:', url);
                     window.showAdBlockerNotification?.();
                     return null;
                 }
             };
+
+            // 尝试使用Object.defineProperty覆盖
+            Object.defineProperty(window.location, 'assign', {
+                value: interceptedAssign,
+                configurable: true
+            });
+
+            // 创建安全函数作为备选
+            window.safeAssign = function (url) {
+                if (isAllowedUrl(url)) {
+                    originalAssign.call(window.location, url);
+                } else {
+                    console.log('通过safeAssign拦截location.assign跳转:', url);
+                    window.showAdBlockerNotification?.();
+                }
+            };
+        } catch (e) {
+            console.log('无法覆盖location.assign:', e);
+            // 如果覆盖失败，依靠其他防护机制
         }
 
-        // 4. 覆盖 location.replace
-        if (!window.location.originalReplace) {
-            window.location.originalReplace = window.location.replace;
-            window.location.replace = function (url) {
+        // 4. 覆盖 location.replace - 修复版本
+        try {
+            // 保存原始函数的引用
+            const originalReplace = window.location.replace;
+            // 创建拦截函数
+            const interceptedReplace = function (url) {
                 if (isAllowedUrl(url)) {
-                    return window.location.originalReplace(url);
+                    return originalReplace.call(window.location, url);
                 } else {
                     console.log('拦截location.replace跳转:', url);
                     window.showAdBlockerNotification?.();
                     return null;
                 }
             };
+
+            // 尝试使用Object.defineProperty覆盖
+            Object.defineProperty(window.location, 'replace', {
+                value: interceptedReplace,
+                configurable: true
+            });
+
+            // 创建安全函数作为备选
+            window.safeReplace = function (url) {
+                if (isAllowedUrl(url)) {
+                    originalReplace.call(window.location, url);
+                } else {
+                    console.log('通过safeReplace拦截location.replace跳转:', url);
+                    window.showAdBlockerNotification?.();
+                }
+            };
+        } catch (e) {
+            console.log('无法覆盖location.replace:', e);
+            // 如果覆盖失败，依靠其他防护机制
         }
 
         // 5. 增强 - 拦截 window 上下文
