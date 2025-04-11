@@ -2,4 +2,4 @@
 
 ## 安装方法
 
-[点击此处安装脚本](https://raw.githubusercontent.com/AhogeK/bt4g-magnet-autogen/master/bt4g-magnet-autogen.ahogek.js)
+[点击此处安装脚本](https://greasyfork.org/en/scripts/530876-bt4g-magnet-autogen)
