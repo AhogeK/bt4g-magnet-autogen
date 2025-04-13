@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name            BT4G Magnet AutoGen
 // @namespace       https://ahogek.com
-// @version         1.4.1
+// @version         1.4.2
 // @description     自动转换BT4G哈希到磁力链接 | 添加高级搜索选项：分辨率、HDR、编码、杜比音频和模糊搜索 | 删除资源恢复 | 广告拦截（未精准测试）
 // @author          AhogeK
 // @match           *://*.bt4g.org/*
@@ -903,12 +903,19 @@
     // 检查URL是否是允许的
     function isAllowedUrl(url) {
         if (!url) return false;
+
         // 允许磁力链接
         if (url.startsWith('magnet:')) return true;
+
         // 允许网站内部链接
         if (url.startsWith('/') || url.startsWith('#')) return true;
+
+        // 允许含有"bootstrap"的URL (新增)
+        if (url.includes('bootstrap')) return true;
+
         try {
             const urlObj = new URL(url, location.origin);
+
             // 检查是否是允许的域名
             return ALLOWED_DOMAINS.some(domain => urlObj.hostname.includes(domain));
         } catch (e) {
@@ -1322,6 +1329,16 @@
     function interceptLinkClicks() {
         // 使用捕获阶段拦截所有点击
         document.addEventListener('click', function (e) {
+            // 检查是否点击了设置栏内的元素
+            const isSettingsClick = e.target.closest('.settings-bar') ||
+                e.target.id === 'theme-toggle' ||
+                e.target.closest('#langDropdown') ||
+                e.target.closest('.dropdown-menu');
+
+            // 如果是设置栏内的点击，不进行拦截
+            if (isSettingsClick) {
+                return;
+            }
             // 1. 检查是否点击了链接
             let targetElement = e.target;
             let isBlocked = false;
@@ -1495,6 +1512,14 @@
 
     // 防止通过特殊手段添加的脚本和iframe
     function preventDynamicElements() {
+        // 添加一个白名单脚本列表
+        const ALLOWED_SCRIPTS = [
+            'bootstrap',
+            'jquery',
+            'popper',
+            'theme',
+            'main'
+        ];
         // 1. 覆盖document.write和document.writeln
         const originalWrite = document.write;
         document.write = function (...args) {
@@ -1527,6 +1552,12 @@
                 if (node.nodeName === 'SCRIPT') {
                     const content = node.textContent || node.innerText || '';
                     const src = node.getAttribute('src') || '';
+
+                    // 如果是白名单脚本，直接允许
+                    if (ALLOWED_SCRIPTS.some(script => src.includes(script)) ||
+                        ALLOWED_SCRIPTS.some(script => content.includes(script))) {
+                        return originalAppendChild.call(this, node);
+                    }
 
                     if ((content && (content.includes('window.open') || content.includes('popup'))) ||
                         (src && !isAllowedUrl(src))) {
@@ -1611,9 +1642,32 @@
         };
     }
 
+    // 在初始化时添加对Bootstrap必要组件的保护
+    function protectBootstrapFunctionality() {
+        // 保护下拉菜单的点击事件
+        const dropdowns = document.querySelectorAll('[data-bs-toggle="dropdown"]');
+        dropdowns.forEach(dropdown => {
+            dropdown.addEventListener('click', function (e) {
+                // 阻止事件被其他监听器捕获
+                e.stopPropagation();
+            });
+        });
+
+        // 保护主题切换按钮
+        const themeToggle = document.getElementById('theme-toggle');
+        if (themeToggle) {
+            themeToggle.addEventListener('click', function (e) {
+                e.stopPropagation();
+            });
+        }
+    }
+
     // 主函数：初始化广告拦截器
     function initAdBlocker() {
         console.log('BT4G 增强广告拦截器已激活 - 强化新标签页防护');
+
+        // 立即保护Bootstrap功能
+        protectBootstrapFunctionality();
 
         // 立即调用所有拦截函数
         removeOverlays();
