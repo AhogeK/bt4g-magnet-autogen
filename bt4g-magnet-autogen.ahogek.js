@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name            BT4G Magnet AutoGen
 // @namespace       https://ahogek.com
-// @version         1.4.0
+// @version         1.4.1
 // @description     自动转换BT4G哈希到磁力链接 | 添加高级搜索选项：分辨率、HDR、编码、杜比音频和模糊搜索 | 删除资源恢复 | 广告拦截（未精准测试）
 // @author          AhogeK
 // @match           *://*.bt4g.org/*
@@ -889,6 +889,17 @@
         'filepax.com'
     ];
 
+    const ESSENTIAL_CLASSES = [
+        'settings-bar',
+        'navbar',
+        'header',
+        'search-form',
+        'dropdown',
+        'dropdown-menu',
+        'btn-primary',
+        'pagination'
+    ];
+
     // 检查URL是否是允许的
     function isAllowedUrl(url) {
         if (!url) return false;
@@ -999,6 +1010,11 @@
             return false;
         }
 
+        // 如果是重要UI元素，不视为广告叠加层
+        if (isEssentialElement(element)) {
+            return false;
+        }
+
         const style = window.getComputedStyle(element);
         const position = style.getPropertyValue('position');
         const zIndex = parseInt(style.getPropertyValue('z-index'), 10);
@@ -1038,10 +1054,14 @@
 
     // 判断是否为页面必要元素
     function isEssentialElement(element) {
-        // 检查是否是设置栏或其子元素
-        const isSettingsBar = element.closest('.settings-bar') !== null;
+        // 检查元素及其子元素的类名是否在白名单中
+        for (const className of ESSENTIAL_CLASSES) {
+            if (element.classList.contains(className) || element.querySelector(`.${className}`)) {
+                return true;
+            }
+        }
 
-        // 原有检查条件保持不变
+        // 检查是否包含重要的页面功能元素
         const isNavbar = element.classList.contains('navbar') ||
             element.id === 'header' ||
             element.querySelector('.navbar');
@@ -1057,7 +1077,13 @@
         // 检查是否是我们的通知元素
         const isNotification = isScriptNotification(element);
 
-        return isSettingsBar || isNavbar || isSearchForm || hasMagnetButton || isNotification;
+        // 检查是否是设置栏
+        const isSettingsBar = element.classList.contains('settings-bar') ||
+            element.querySelector('.settings-bar') ||
+            element.querySelector('#theme-toggle') ||
+            element.querySelector('#langDropdown');
+
+        return isNavbar || isSearchForm || hasMagnetButton || isNotification || isSettingsBar;
     }
 
     function setupNavigationProtection() {
