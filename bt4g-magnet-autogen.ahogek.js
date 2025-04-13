@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name            BT4G Magnet AutoGen
 // @namespace       https://ahogek.com
-// @version         1.3.9
+// @version         1.4.0
 // @description     自动转换BT4G哈希到磁力链接 | 添加高级搜索选项：分辨率、HDR、编码、杜比音频和模糊搜索 | 删除资源恢复 | 广告拦截（未精准测试）
 // @author          AhogeK
 // @match           *://*.bt4g.org/*
@@ -994,6 +994,11 @@
 
     // 判断元素是否为叠加层（增强版）
     function isOverlay(element) {
+        // 如果是设置栏或其子元素，直接返回false
+        if (element.closest('.settings-bar')) {
+            return false;
+        }
+
         const style = window.getComputedStyle(element);
         const position = style.getPropertyValue('position');
         const zIndex = parseInt(style.getPropertyValue('z-index'), 10);
@@ -1033,7 +1038,10 @@
 
     // 判断是否为页面必要元素
     function isEssentialElement(element) {
-        // 检查是否包含重要的页面功能元素
+        // 检查是否是设置栏或其子元素
+        const isSettingsBar = element.closest('.settings-bar') !== null;
+
+        // 原有检查条件保持不变
         const isNavbar = element.classList.contains('navbar') ||
             element.id === 'header' ||
             element.querySelector('.navbar');
@@ -1049,7 +1057,7 @@
         // 检查是否是我们的通知元素
         const isNotification = isScriptNotification(element);
 
-        return isNavbar || isSearchForm || hasMagnetButton || isNotification;
+        return isSettingsBar || isNavbar || isSearchForm || hasMagnetButton || isNotification;
     }
 
     function setupNavigationProtection() {
