@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name            BT4G Magnet AutoGen
 // @namespace       https://ahogek.com
-// @version         1.4.6
+// @version         1.4.7
 // @description     自动转换BT4G哈希到磁力链接 | 添加高级搜索选项：分辨率、HDR、编码、杜比音频和模糊搜索 | 删除资源恢复
 // @author          AhogeK
 // @match           *://*.bt4g.org/*
@@ -20,8 +20,8 @@
 (function () {
     'use strict';
 
-    // 查找所有磁力链接按钮
-    const magnetButtons = document.querySelectorAll('a.btn-primary[href*="downloadtorrentfile.com/hash/"]');
+    // 查找所有磁力链接按钮（兼容新旧class）
+    const magnetButtons = document.querySelectorAll('a.btn-primary[href*="downloadtorrentfile.com/hash/"], a.notion-btn-primary[href*="downloadtorrentfile.com/hash/"]');
 
     magnetButtons.forEach(button => {
         // 从URL中提取哈希值
@@ -35,6 +35,12 @@
             button.href = `magnet:?xt=urn:btih:${hash}`;
             button.setAttribute('title', '直接打开磁力链接');
             button.removeAttribute('target'); // 移除新标签页打开
+            button.removeAttribute('rel'); // 移除nofollow等属性
+
+            // 在捕获阶段阻止广告脚本劫持点击
+            button.addEventListener('click', function (e) {
+                e.stopPropagation();
+            }, true);
 
             // 添加新标签，表明这是直接链接
             const badge = document.createElement('span');
@@ -55,8 +61,8 @@
         }
     });
 
-    // 寻找所有种子下载按钮
-    const torrentButtons = document.querySelectorAll('a.btn-success[href*="downloadtorrentfile.com/hash/"]');
+    // 寻找所有种子下载按钮（兼容新旧class）
+    const torrentButtons = document.querySelectorAll('a.btn-success[href*="downloadtorrentfile.com/hash/"], a.notion-btn-success[href*="downloadtorrentfile.com/hash/"]');
 
     torrentButtons.forEach(button => {
         // 从URL中提取哈希值
@@ -68,6 +74,12 @@
             // 修改按钮为直接下载种子文件
             button.setAttribute('title', '直接下载种子文件');
             button.removeAttribute('target'); // 移除新标签页打开
+            button.removeAttribute('rel'); // 移除nofollow等属性
+
+            // 在捕获阶段阻止广告脚本劫持点击
+            button.addEventListener('click', function (e) {
+                e.stopPropagation();
+            }, true);
 
             // 添加新标签，表明这是直接下载
             const badge = document.createElement('span');
@@ -232,6 +244,22 @@
             }, 300);
         }, 3000);
     }
+
+    // 全局拦截：捕获阶段拦截所有downloadtorrentfile.com/hash/链接的点击
+    document.addEventListener('click', function (e) {
+        const link = e.target.closest('a[href*="downloadtorrentfile.com/hash/"]');
+        if (!link) return;
+
+        const url = new URL(link.href);
+        const pathParts = url.pathname.split('/');
+        const hash = pathParts[pathParts.length - 1].split('?')[0];
+
+        if (hash && hash.length === 40) {
+            e.preventDefault();
+            e.stopPropagation();
+            window.location.href = `magnet:?xt=urn:btih:${hash}`;
+        }
+    }, true); // 使用捕获阶段，优先于广告脚本执行
 })();
 
 (function () {
