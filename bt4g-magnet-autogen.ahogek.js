@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name            BT4G Magnet AutoGen
 // @namespace       https://ahogek.com
-// @version         1.4.8
+// @version         1.4.10
 // @description     自动转换BT4G哈希到磁力链接 | 添加高级搜索选项：分辨率、HDR、编码、杜比音频和模糊搜索 | 删除资源恢复
 // @author          AhogeK
 // @match           *://*.bt4g.org/*
@@ -20,11 +20,89 @@
 (function () {
     'use strict';
 
-    // 克隆节点并替换，彻底清除广告脚本绑定的事件监听器
-    function cloneAndReplace(element) {
-        const clone = element.cloneNode(true);
-        element.parentNode.replaceChild(clone, element);
-        return clone;
+    // 广告域名黑名单
+    const AD_DOMAINS = ['eatcells.com', 'shein.com', 'straitsveiler.com', 'go.mnaspm.com'];
+
+    // MutationObserver：在广告脚本插入DOM时立即删除，阻止其执行
+    const adScriptPatterns = ['straitsveiler', 'eatcells', 'go.mnaspm'];
+    const scriptObserver = new MutationObserver(mutations => {
+        for (const mutation of mutations) {
+            for (const node of mutation.addedNodes) {
+                if (node.tagName === 'SCRIPT' && node.src &&
+                    adScriptPatterns.some(p => node.src.includes(p))) {
+                    node.remove();
+                    console.log('[BT4G] Removed ad script:', node.src);
+                }
+                // 也检查子节点（脚本可能嵌套在其他元素中）
+                if (node.querySelectorAll) {
+                    node.querySelectorAll('script[src]').forEach(s => {
+                        if (adScriptPatterns.some(p => s.src.includes(p))) {
+                            s.remove();
+                            console.log('[BT4G] Removed nested ad script:', s.src);
+                        }
+                    });
+                }
+            }
+        }
+    });
+    scriptObserver.observe(document.documentElement, {childList: true, subtree: true});
+
+    // 删除已存在的广告脚本
+    document.querySelectorAll('script[src*="straitsveiler"], script[src*="eatcells"]').forEach(s => s.remove());
+
+    // 拦截 window.open 阻止广告弹窗
+    const originalOpen = window.open;
+    window.open = function (url, ...args) {
+        if (url && typeof url === 'string' && AD_DOMAINS.some(ad => url.includes(ad))) {
+            console.log('[BT4G] Blocked ad popup:', url);
+            return null;
+        }
+        return originalOpen.call(window, url, ...args);
+    };
+
+    // 注入链接按钮的 hover 样式
+    const linkBtnStyle = document.createElement('style');
+    linkBtnStyle.textContent = `
+        button.bt4g-link-btn {
+            background: none !important;
+            border: none !important;
+            padding: 0 !important;
+            font: inherit !important;
+            cursor: pointer !important;
+            text-align: left !important;
+            display: inline !important;
+            text-decoration: none !important;
+            color: #6ea8fe !important;
+        }
+        [data-bs-theme="light"] button.bt4g-link-btn {
+            color: #0d6efd !important;
+        }
+        button.bt4g-link-btn:hover {
+            text-decoration: underline !important;
+            opacity: 0.8;
+        }
+    `;
+    document.head.appendChild(linkBtnStyle);
+
+    // 将 <a> 替换为 <button>，绕过广告脚本对链接的事件劫持
+    // styleAsLink: true = 链接外观（搜索结果标题），false = 按钮外观（下载按钮）
+    function replaceLinkWithButton(link, clickHandler, styleAsLink = true) {
+        const btn = document.createElement('button');
+        btn.className = link.className;
+        btn.title = link.title || '';
+        btn.innerHTML = link.innerHTML;
+        btn.style.cssText = link.style.cssText;
+        if (styleAsLink) {
+            btn.classList.add('bt4g-link-btn');
+        }
+        btn.addEventListener('click', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            clickHandler(e, btn);
+        });
+        link.parentNode.replaceChild(btn, link);
+        return btn;
     }
 
     // 从URL中提取哈希值
@@ -39,18 +117,14 @@
         }
     }
 
-    // 查找所有磁力链接按钮（兼容新旧class）
+    // 查找所有磁力链接按钮（兼容新旧class），替换为<button>避免广告劫持
     document.querySelectorAll('a.btn-primary[href*="downloadtorrentfile.com/hash/"], a.notion-btn-primary[href*="downloadtorrentfile.com/hash/"]').forEach(originalButton => {
         const hash = extractHash(originalButton.href);
         if (!hash) return;
 
-        // 克隆按钮，清除广告脚本绑定的所有事件
-        const button = cloneAndReplace(originalButton);
-
-        button.href = `magnet:?xt=urn:btih:${hash}`;
-        button.setAttribute('title', '直接打开磁力链接');
-        button.removeAttribute('target');
-        button.removeAttribute('rel');
+        const btn = replaceLinkWithButton(originalButton, () => {
+            window.location.href = `magnet:?xt=urn:btih:${hash}`;
+        }, false); // 保持按钮外观
 
         const badge = document.createElement('span');
         badge.textContent = '直接';
@@ -63,21 +137,28 @@
             margin-left: 5px;
             vertical-align: middle;
         `;
-        const img = button.querySelector('img');
-        button.insertBefore(badge, img?.nextSibling || null);
+        const img = btn.querySelector('img');
+        btn.insertBefore(badge, img?.nextSibling || null);
     });
 
-    // 寻找所有种子下载按钮（兼容新旧class）
+    // 寻找所有种子下载按钮（兼容新旧class），替换为<button>避免广告劫持
     document.querySelectorAll('a.btn-success[href*="downloadtorrentfile.com/hash/"], a.notion-btn-success[href*="downloadtorrentfile.com/hash/"]').forEach(originalButton => {
         const hash = extractHash(originalButton.href);
         if (!hash) return;
 
-        // 克隆按钮，清除广告脚本绑定的所有事件
-        const button = cloneAndReplace(originalButton);
+        const btn = replaceLinkWithButton(originalButton, (e, button) => {
+            button.disabled = true;
+            const originalText = button.innerHTML;
+            const originalWidth = button.offsetWidth;
+            button.style.width = `${originalWidth}px`;
+            button.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 下载中...';
 
-        button.setAttribute('title', '直接下载种子文件');
-        button.removeAttribute('target');
-        button.removeAttribute('rel');
+            downloadTorrentFile(hash, [
+                `https://itorrents.org/torrent/${hash.toUpperCase()}.torrent`,
+                `https://btcache.me/torrent/${hash}`,
+                `https://thetorrent.org/${hash}.torrent`
+            ], 0, button, originalText);
+        }, false); // 保持按钮外观
 
         const badge = document.createElement('span');
         badge.textContent = '直接';
@@ -90,46 +171,52 @@
             margin-left: 5px;
             vertical-align: middle;
         `;
-        const img = button.querySelector('img');
-        button.insertBefore(badge, img?.nextSibling || null);
-
-        button.addEventListener('click', function (e) {
-            e.preventDefault();
-            e.stopPropagation();
-
-            const originalText = button.innerHTML;
-            const originalWidth = button.offsetWidth;
-            button.style.width = `${originalWidth}px`;
-            button.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 下载中...';
-            button.disabled = true;
-
-            downloadTorrentFile(hash, [
-                `https://itorrents.org/torrent/${hash.toUpperCase()}.torrent`,
-                `https://btcache.me/torrent/${hash}`,
-                `https://thetorrent.org/${hash}.torrent`
-            ], 0, button, originalText);
-        });
+        const img = btn.querySelector('img');
+        btn.insertBefore(badge, img?.nextSibling || null);
     });
 
-    // 全局兜底：捕获阶段拦截所有downloadtorrentfile.com/hash/链接
+    // 主动替换搜索结果中的 /magnet/ 链接为 <button>，防止广告脚本劫持
+    function replaceMagnetLinks(root) {
+        root.querySelectorAll('a[href^="/magnet/"], a[href*="bt4gprx.com/magnet/"], a[href*="bt4g.com/magnet/"]').forEach(link => {
+            if (link.dataset.bt4gClean) return;
+            link.dataset.bt4gClean = '1';
+
+            const href = link.href;
+            replaceLinkWithButton(link, () => {
+                window.location.href = href;
+            });
+        });
+    }
+    // 页面加载时替换一次
+    replaceMagnetLinks(document);
+    // 动态内容也替换
+    new MutationObserver(mutations => {
+        for (const m of mutations) {
+            for (const node of m.addedNodes) {
+                if (node.nodeType === 1) {
+                    if (node.matches && node.matches('a[href^="/magnet/"]')) {
+                        replaceMagnetLinks(node.parentNode || document);
+                    } else if (node.querySelectorAll) {
+                        replaceMagnetLinks(node);
+                    }
+                }
+            }
+        }
+    }).observe(document.body, {childList: true, subtree: true});
+
+    // 全局兜底：捕获阶段拦截剩余的downloadtorrentfile.com链接
     document.addEventListener('click', function (e) {
         const link = e.target.closest('a[href*="downloadtorrentfile.com/hash/"]');
         if (!link) return;
-
-        const hash = extractHash(link.href);
-        if (!hash) return;
 
         e.preventDefault();
         e.stopPropagation();
         e.stopImmediatePropagation();
 
-        // 克隆替换，防止广告脚本后续劫持
-        const clone = cloneAndReplace(link);
-        clone.href = `magnet:?xt=urn:btih:${hash}`;
-        clone.removeAttribute('target');
-        clone.removeAttribute('rel');
-        // 触发克隆后的链接点击
-        setTimeout(() => clone.click(), 10);
+        const hash = extractHash(link.href);
+        if (hash) {
+            window.location.href = `magnet:?xt=urn:btih:${hash}`;
+        }
     }, true);
 
     // 通过多个来源尝试下载种子文件的函数
