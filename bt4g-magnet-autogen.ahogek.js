@@ -20,104 +20,117 @@
 (function () {
     'use strict';
 
-    // 查找所有磁力链接按钮（兼容新旧class）
-    const magnetButtons = document.querySelectorAll('a.btn-primary[href*="downloadtorrentfile.com/hash/"], a.notion-btn-primary[href*="downloadtorrentfile.com/hash/"]');
+    // 克隆节点并替换，彻底清除广告脚本绑定的事件监听器
+    function cloneAndReplace(element) {
+        const clone = element.cloneNode(true);
+        element.parentNode.replaceChild(clone, element);
+        return clone;
+    }
 
-    magnetButtons.forEach(button => {
-        // 从URL中提取哈希值
-        const url = new URL(button.href);
-        const pathParts = url.pathname.split('/');
-        const hash = pathParts[pathParts.length - 1].split('?')[0];
-
-        if (hash && hash.length === 40) {
-            // 构建真正的磁力链接
-            // 修改按钮行为和外观
-            button.href = `magnet:?xt=urn:btih:${hash}`;
-            button.setAttribute('title', '直接打开磁力链接');
-            button.removeAttribute('target'); // 移除新标签页打开
-            button.removeAttribute('rel'); // 移除nofollow等属性
-
-            // 在捕获阶段阻止广告脚本劫持点击
-            button.addEventListener('click', function (e) {
-                e.stopPropagation();
-            }, true);
-
-            // 添加新标签，表明这是直接链接
-            const badge = document.createElement('span');
-            badge.textContent = '直接';
-            badge.style.cssText = `
-                background-color: #ff5722;
-                color: white;
-                padding: 2px 5px;
-                border-radius: 3px;
-                font-size: 10px;
-                margin-left: 5px;
-                vertical-align: middle;
-            `;
-
-            // 在按钮图片后面插入标记
-            const img = button.querySelector('img');
-            button.insertBefore(badge, img?.nextSibling || null);
+    // 从URL中提取哈希值
+    function extractHash(href) {
+        try {
+            const url = new URL(href);
+            const pathParts = url.pathname.split('/');
+            const hash = pathParts[pathParts.length - 1].split('?')[0];
+            return (hash && hash.length === 40) ? hash : null;
+        } catch {
+            return null;
         }
+    }
+
+    // 查找所有磁力链接按钮（兼容新旧class）
+    document.querySelectorAll('a.btn-primary[href*="downloadtorrentfile.com/hash/"], a.notion-btn-primary[href*="downloadtorrentfile.com/hash/"]').forEach(originalButton => {
+        const hash = extractHash(originalButton.href);
+        if (!hash) return;
+
+        // 克隆按钮，清除广告脚本绑定的所有事件
+        const button = cloneAndReplace(originalButton);
+
+        button.href = `magnet:?xt=urn:btih:${hash}`;
+        button.setAttribute('title', '直接打开磁力链接');
+        button.removeAttribute('target');
+        button.removeAttribute('rel');
+
+        const badge = document.createElement('span');
+        badge.textContent = '直接';
+        badge.style.cssText = `
+            background-color: #ff5722;
+            color: white;
+            padding: 2px 5px;
+            border-radius: 3px;
+            font-size: 10px;
+            margin-left: 5px;
+            vertical-align: middle;
+        `;
+        const img = button.querySelector('img');
+        button.insertBefore(badge, img?.nextSibling || null);
     });
 
     // 寻找所有种子下载按钮（兼容新旧class）
-    const torrentButtons = document.querySelectorAll('a.btn-success[href*="downloadtorrentfile.com/hash/"], a.notion-btn-success[href*="downloadtorrentfile.com/hash/"]');
+    document.querySelectorAll('a.btn-success[href*="downloadtorrentfile.com/hash/"], a.notion-btn-success[href*="downloadtorrentfile.com/hash/"]').forEach(originalButton => {
+        const hash = extractHash(originalButton.href);
+        if (!hash) return;
 
-    torrentButtons.forEach(button => {
-        // 从URL中提取哈希值
-        const url = new URL(button.href);
-        const pathParts = url.pathname.split('/');
-        const hash = pathParts[pathParts.length - 1].split('?')[0];
+        // 克隆按钮，清除广告脚本绑定的所有事件
+        const button = cloneAndReplace(originalButton);
 
-        if (hash && hash.length === 40) {
-            // 修改按钮为直接下载种子文件
-            button.setAttribute('title', '直接下载种子文件');
-            button.removeAttribute('target'); // 移除新标签页打开
-            button.removeAttribute('rel'); // 移除nofollow等属性
+        button.setAttribute('title', '直接下载种子文件');
+        button.removeAttribute('target');
+        button.removeAttribute('rel');
 
-            // 在捕获阶段阻止广告脚本劫持点击
-            button.addEventListener('click', function (e) {
-                e.stopPropagation();
-            }, true);
+        const badge = document.createElement('span');
+        badge.textContent = '直接';
+        badge.style.cssText = `
+            background-color: #28a745;
+            color: white;
+            padding: 2px 5px;
+            border-radius: 3px;
+            font-size: 10px;
+            margin-left: 5px;
+            vertical-align: middle;
+        `;
+        const img = button.querySelector('img');
+        button.insertBefore(badge, img?.nextSibling || null);
 
-            // 添加新标签，表明这是直接下载
-            const badge = document.createElement('span');
-            badge.textContent = '直接';
-            badge.style.cssText = `
-                background-color: #28a745;
-                color: white;
-                padding: 2px 5px;
-                border-radius: 3px;
-                font-size: 10px;
-                margin-left: 5px;
-                vertical-align: middle;
-            `;
+        button.addEventListener('click', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
 
-            // 在按钮图片后面插入标记
-            const img = button.querySelector('img');
-            button.insertBefore(badge, img?.nextSibling || null);
+            const originalText = button.innerHTML;
+            const originalWidth = button.offsetWidth;
+            button.style.width = `${originalWidth}px`;
+            button.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 下载中...';
+            button.disabled = true;
 
-            // 添加点击事件监听器
-            button.addEventListener('click', function (e) {
-                e.preventDefault(); // 阻止默认导航行为
-
-                // 保存原始按钮状态
-                const originalText = button.innerHTML;
-                const originalWidth = button.offsetWidth;
-                button.style.width = `${originalWidth}px`; // 保持按钮宽度不变
-                button.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> 下载中...';
-                button.disabled = true;
-
-                // 尝试从多个源下载种子文件
-                downloadTorrentFile(hash, [
-                    `https://itorrents.org/torrent/${hash.toUpperCase()}.torrent`,
-                    `https://btcache.me/torrent/${hash}`,
-                    `https://thetorrent.org/${hash}.torrent`
-                ], 0, button, originalText);
-            });
-        }
+            downloadTorrentFile(hash, [
+                `https://itorrents.org/torrent/${hash.toUpperCase()}.torrent`,
+                `https://btcache.me/torrent/${hash}`,
+                `https://thetorrent.org/${hash}.torrent`
+            ], 0, button, originalText);
+        });
     });
+
+    // 全局兜底：捕获阶段拦截所有downloadtorrentfile.com/hash/链接
+    document.addEventListener('click', function (e) {
+        const link = e.target.closest('a[href*="downloadtorrentfile.com/hash/"]');
+        if (!link) return;
+
+        const hash = extractHash(link.href);
+        if (!hash) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+        e.stopImmediatePropagation();
+
+        // 克隆替换，防止广告脚本后续劫持
+        const clone = cloneAndReplace(link);
+        clone.href = `magnet:?xt=urn:btih:${hash}`;
+        clone.removeAttribute('target');
+        clone.removeAttribute('rel');
+        // 触发克隆后的链接点击
+        setTimeout(() => clone.click(), 10);
+    }, true);
 
     // 通过多个来源尝试下载种子文件的函数
     function downloadTorrentFile(hash, urls, index, button, originalText) {
@@ -244,22 +257,6 @@
             }, 300);
         }, 3000);
     }
-
-    // 全局拦截：捕获阶段拦截所有downloadtorrentfile.com/hash/链接的点击
-    document.addEventListener('click', function (e) {
-        const link = e.target.closest('a[href*="downloadtorrentfile.com/hash/"]');
-        if (!link) return;
-
-        const url = new URL(link.href);
-        const pathParts = url.pathname.split('/');
-        const hash = pathParts[pathParts.length - 1].split('?')[0];
-
-        if (hash && hash.length === 40) {
-            e.preventDefault();
-            e.stopPropagation();
-            window.location.href = `magnet:?xt=urn:btih:${hash}`;
-        }
-    }, true); // 使用捕获阶段，优先于广告脚本执行
 })();
 
 (function () {
