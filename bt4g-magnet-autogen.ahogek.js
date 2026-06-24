@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name            BT4G Magnet AutoGen
 // @namespace       https://ahogek.com
-// @version         1.4.4
+// @version         1.4.5
 // @description     自动转换BT4G哈希到磁力链接 | 添加高级搜索选项：分辨率、HDR、编码、杜比音频和模糊搜索 | 删除资源恢复
 // @author          AhogeK
 // @match           *://*.bt4g.org/*
@@ -307,7 +307,7 @@
         // 应用固定样式而非弹出样式
         updateFixedAdvancedSearchStyle(advancedSearchDiv, isDarkMode);
 
-        // 添加到搜索表单之后（不是内部）
+        // 添加到搜索表单之后，通过样式控制宽度和居中
         searchForm.parentNode.insertBefore(advancedSearchDiv, searchForm.nextSibling);
 
         // 创建分辨率选项行
@@ -732,6 +732,9 @@
            display: flex;
            flex-direction: column;
            width: 100%;
+           max-width: 720px;
+           margin-left: auto;
+           margin-right: auto;
            padding: 12px;
            background-color: ${backgroundColor};
            color: ${textColor};
