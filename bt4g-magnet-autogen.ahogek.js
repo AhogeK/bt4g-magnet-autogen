@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name            BT4G Magnet AutoGen
 // @namespace       https://ahogek.com
-// @version         1.4.10
+// @version         1.4.11
 // @description     自动转换BT4G哈希到磁力链接 | 添加高级搜索选项：分辨率、HDR、编码、杜比音频和模糊搜索 | 删除资源恢复
 // @author          AhogeK
 // @match           *://*.bt4g.org/*
@@ -15,6 +15,7 @@
 // @updateURL       https://raw.githubusercontent.com/AhogeK/bt4g-magnet-autogen/master/bt4g-magnet-autogen.ahogek.js
 // @downloadURL     https://raw.githubusercontent.com/AhogeK/bt4g-magnet-autogen/master/bt4g-magnet-autogen.ahogek.js
 // @license         MIT
+// @run-at          document-start
 // ==/UserScript==
 
 (function () {
@@ -59,6 +60,41 @@
         }
         return originalOpen.call(window, url, ...args);
     };
+
+    // 标记：是否允许即将发生的页面导航（true = 用户主动触发的正常导航）
+    let allowNavigation = false;
+    window._bt4gAllowNav = function (v) { allowNavigation = v; };
+
+    // 在 beforeunload 时检查目标 URL，阻止广告跳转
+    window.addEventListener('beforeunload', function (e) {
+        if (allowNavigation) {
+            allowNavigation = false;
+            return;
+        }
+        const currentUrl = location.href;
+        if (AD_DOMAINS.some(ad => currentUrl.includes(ad))) {
+            e.preventDefault();
+            e.returnValue = '';
+            console.log('[BT4G] Blocked ad redirect in beforeunload:', currentUrl);
+        }
+    });
+
+})(); // 广告拦截 IIFE 结束
+
+// 功能代码：等待 DOM 加载完成后执行
+(function () {
+    'use strict';
+
+    function waitForDOM() {
+        return new Promise(resolve => {
+            if (document.readyState !== 'loading') resolve();
+            else document.addEventListener('DOMContentLoaded', resolve);
+        });
+    }
+
+    waitForDOM().then(() => {
+
+    const AD_DOMAINS = ['eatcells.com', 'shein.com', 'straitsveiler.com', 'go.mnaspm.com'];
 
     // 注入链接按钮的 hover 样式
     const linkBtnStyle = document.createElement('style');
@@ -123,6 +159,7 @@
         if (!hash) return;
 
         const btn = replaceLinkWithButton(originalButton, () => {
+            window._bt4gAllowNav(true);
             window.location.href = `magnet:?xt=urn:btih:${hash}`;
         }, false); // 保持按钮外观
 
@@ -183,6 +220,7 @@
 
             const href = link.href;
             replaceLinkWithButton(link, () => {
+                window._bt4gAllowNav(true);
                 window.location.href = href;
             });
         });
@@ -215,6 +253,7 @@
 
         const hash = extractHash(link.href);
         if (hash) {
+            window._bt4gAllowNav(true);
             window.location.href = `magnet:?xt=urn:btih:${hash}`;
         }
     }, true);
@@ -344,7 +383,9 @@
             }, 300);
         }, 3000);
     }
-})();
+
+    }); // waitForDOM().then() 结束
+})(); // 功能代码 IIFE 结束
 
 (function () {
     'use strict';
